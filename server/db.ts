@@ -176,3 +176,50 @@ export async function getCompetitorsByAuditId(auditId: number) {
     .from(auditCompetitors)
     .where(eq(auditCompetitors.auditId, auditId));
 }
+
+// ─── Account Access ───────────────────────────────────────────────────────────
+
+import { accountAccess, type InsertAccountAccess } from "../drizzle/schema";
+
+export async function createAccountAccess(data: InsertAccountAccess) {
+  const db = await getDb();
+  if (!db) return null;
+  await db.insert(accountAccess).values(data);
+  const result = await db
+    .select()
+    .from(accountAccess)
+    .where(eq(accountAccess.brandId, data.brandId))
+    .orderBy(desc(accountAccess.createdAt))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function getAccountAccessByBrandId(brandId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db
+    .select()
+    .from(accountAccess)
+    .where(eq(accountAccess.brandId, brandId))
+    .orderBy(desc(accountAccess.createdAt))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function updateAccountAccess(id: number, data: Partial<InsertAccountAccess>) {
+  const db = await getDb();
+  if (!db) return null;
+  await db.update(accountAccess).set(data).where(eq(accountAccess.id, id));
+  const result = await db
+    .select()
+    .from(accountAccess)
+    .where(eq(accountAccess.id, id))
+    .limit(1);
+  return result[0] ?? null;
+}
+
+export async function listAccountAccess() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(accountAccess).orderBy(desc(accountAccess.createdAt));
+}

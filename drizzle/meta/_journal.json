@@ -15,6 +15,13 @@
       "when": 1780763285757,
       "tag": "0001_bored_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1780765674809,
+      "tag": "0002_famous_multiple_man",
+      "breakpoints": true
     }
   ]
 }

@@ -68,15 +68,44 @@ export interface Audit {
   estimatedSpendMax: number | null;
   estimatedImpressionsMin: number | null;
   estimatedImpressionsMax: number | null;
+
+  // ─── Andromeda Readiness Score (4 dimensions) ──────────────────────────────
   andromedaScore: number | null;
+  /** Format Diversity Index — structural variety across video, image, carousel, collection */
   formatScore: number | null;
+  /** Creator Signal Score — % of ads featuring creator partnerships (benchmark: 30%+) */
   partnershipScore: number | null;
+  /** Creative Freshness Score — ad flight duration and rotation */
   durationScore: number | null;
+  /** Volume-to-Concept Ratio — structural concept diversity vs ad volume */
+  conceptScore: number | null;
+  /** Estimated number of structurally distinct creative concepts */
+  estimatedConcepts: number | null;
+  /** Entity ID collapse risk: "critical" | "high" | "medium" | "low" */
+  entityIdRisk: "critical" | "high" | "medium" | "low" | null;
+
+  // ─── Format & Platform Data ────────────────────────────────────────────────
   formatBreakdown: FormatBreakdown | null;
   metaAdsData: AdDataSnapshot | null;
   tiktokAdsData: AdDataSnapshot | null;
   creatorGapData: CreatorGapData | null;
   usedMockData: boolean | null;
+
+  // ─── Account-Level Metrics (requires access grant) ────────────────────────
+  hasAccountData: boolean | null;
+  /** First-Touch Incrementality score (benchmark: 58%+) */
+  ftiScore: number | null;
+  /** CTR delta vs brand BAU (target: 13–20% above) */
+  ctrPct: number | null;
+  /** 3-second video view rate (benchmark: 25%+) */
+  thumbStopRate: number | null;
+  /** 50% video view rate (benchmark: 15%+) */
+  holdRate: number | null;
+  /** CPA delta vs brand BAU (target: 10–25% lower, so negative is good) */
+  cpaDeltaPct: number | null;
+  /** Meta's own creative similarity score (risk threshold: 60%) */
+  creativeSimilarityScore: number | null;
+
   createdAt: Date;
   updatedAt: Date;
 }

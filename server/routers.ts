@@ -3,7 +3,7 @@ import { nanoid } from "nanoid";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
   upsertBrand,
   getBrandBySlug,
@@ -15,6 +15,10 @@ import {
   listRecentAudits,
   createAuditCompetitors,
   getCompetitorsByAuditId,
+  createAccountAccess,
+  getAccountAccessByBrandId,
+  updateAccountAccess,
+  listAccountAccess,
 } from "./db";
 import { scoreAndromeda } from "./andromeda";
 import {
@@ -24,6 +28,8 @@ import {
   COMPETITOR_MOCKS,
 } from "./mockData";
 import { fetchBrandAdData } from "./apiConnectors";
+import { fetchAccountLevelData } from "./accountConnectors";
+import { notifyOwner } from "./_core/notification";
 
 export const appRouter = router({
   system: systemRouter,
@@ -39,9 +45,6 @@ export const appRouter = router({
 
   // ─── Brand Router ──────────────────────────────────────────────────────────
   brand: router({
-    /**
-     * Search for brands by name — returns existing DB brands + mock suggestions.
-     */
     search: publicProcedure
       .input(z.object({ query: z.string().min(1) }))
       .query(async ({ input }) => {
@@ -61,15 +64,11 @@ export const appRouter = router({
         return { dbResults, suggestions: suggestions.slice(0, 6) };
       }),
 
-    /**
-     * Resolve a brand name to its Meta Page ID and TikTok handle.
-     */
     resolve: publicProcedure
       .input(z.object({ query: z.string().min(1) }))
       .mutation(async ({ input }) => {
         const mock = resolveBrandMock(input.query);
         if (!mock) return null;
-
         const brand = await upsertBrand({
           name: mock.name,
           slug: mock.slug,
@@ -77,7 +76,6 @@ export const appRouter = router({
           tiktokHandle: mock.tiktokHandle || null,
           industry: mock.industry,
         });
-
         return {
           brand,
           competitorSuggestions: mock.competitorSlugs.map((slug) => {
@@ -87,28 +85,15 @@ export const appRouter = router({
         };
       }),
 
-    /**
-     * Get a brand by slug.
-     */
     get: publicProcedure
       .input(z.object({ slug: z.string() }))
-      .query(async ({ input }) => {
-        return getBrandBySlug(input.slug);
-      }),
+      .query(async ({ input }) => getBrandBySlug(input.slug)),
   }),
 
   // ─── Audit Router ──────────────────────────────────────────────────────────
   audit: router({
-    /**
-     * List recent completed audits for the home dashboard.
-     */
-    listRecent: publicProcedure.query(async () => {
-      return listRecentAudits(12);
-    }),
+    listRecent: publicProcedure.query(async () => listRecentAudits(12)),
 
-    /**
-     * Get a single audit by its numeric ID.
-     */
     get: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
@@ -118,9 +103,6 @@ export const appRouter = router({
         return { audit, competitors };
       }),
 
-    /**
-     * Get an audit by its shareable ID (public).
-     */
     getByShareId: publicProcedure
       .input(z.object({ shareId: z.string() }))
       .query(async ({ input }) => {
@@ -130,10 +112,6 @@ export const appRouter = router({
         return { audit, competitors };
       }),
 
-    /**
-     * Create and run a new audit for a brand.
-     * Uses mock data (live API integration to be wired in later).
-     */
     create: publicProcedure
       .input(
         z.object({
@@ -199,7 +177,7 @@ export const appRouter = router({
           (meta.avgDurationDays * meta.totalAds + tiktok.avgDurationDays * tiktok.totalAds) /
           Math.max(totalAds, 1);
 
-        // 5. Score with Andromeda Algorithm
+        // 5. Score with Andromeda Readiness Algorithm (4-dimension)
         const scores = scoreAndromeda({
           totalAds,
           partnershipAds,
@@ -207,7 +185,24 @@ export const appRouter = router({
           avgDurationDays,
         });
 
-        // 6. Update audit with results
+        // 6. Check for account-level access
+        const accessGrant = brandId ? await getAccountAccessByBrandId(brandId) : null;
+        let accountLevelData = null;
+        let hasAccountData = false;
+
+        if (
+          accessGrant?.status === "active" &&
+          (accessGrant.metaAdAccountId || accessGrant.tiktokAdvertiserId)
+        ) {
+          accountLevelData = await fetchAccountLevelData({
+            metaAdAccountId: accessGrant.metaAdAccountId,
+            tiktokAdvertiserId: accessGrant.tiktokAdvertiserId,
+            period: input.period,
+          });
+          hasAccountData = accountLevelData !== null;
+        }
+
+        // 7. Update audit with results
         const updatedAudit = await updateAudit(audit.id, {
           status: "complete",
           totalAds,
@@ -221,14 +216,29 @@ export const appRouter = router({
           formatScore: scores.formatScore,
           partnershipScore: scores.partnershipScore,
           durationScore: scores.durationScore,
+          conceptScore: scores.conceptScore,
+          estimatedConcepts: scores.estimatedConcepts,
+          entityIdRisk: scores.entityIdRisk,
           formatBreakdown,
           metaAdsData: meta,
           tiktokAdsData: tiktok,
           creatorGapData: creatorGap,
           usedMockData,
+          hasAccountData,
+          ...(accountLevelData
+            ? {
+                ftiScore: accountLevelData.ftiScore,
+                ctrPct: accountLevelData.ctrPct,
+                thumbStopRate: accountLevelData.thumbStopRate,
+                holdRate: accountLevelData.holdRate,
+                cpaDeltaPct: accountLevelData.cpaDeltaPct,
+                creativeSimilarityScore: accountLevelData.creativeSimilarityScore,
+                accountLevelData,
+              }
+            : {}),
         });
 
-        // 7. Process competitors
+        // 8. Process competitors
         const competitorNames =
           input.competitors.length > 0
             ? input.competitors
@@ -253,6 +263,7 @@ export const appRouter = router({
           competitors,
           scores,
           shareId,
+          hasAccountData,
         };
       }),
   }),
@@ -270,6 +281,160 @@ export const appRouter = router({
         });
       }),
   }),
+
+  // ─── Account Access Router ─────────────────────────────────────────────────
+  accountAccess: router({
+    /**
+     * Request account-level access for a brand.
+     * Sends Tapline the brand's contact email and account IDs.
+     * The brand will receive step-by-step instructions to grant
+     * read-only Analyst/Viewer access.
+     */
+    request: publicProcedure
+      .input(
+        z.object({
+          brandName: z.string().min(1),
+          brandSlug: z.string().min(1),
+          contactEmail: z.string().email(),
+          metaAdAccountId: z.string().optional(),
+          tiktokAdvertiserId: z.string().optional(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        // Resolve brand
+        let brand = await getBrandBySlug(input.brandSlug);
+        if (!brand) {
+          brand = await upsertBrand({
+            name: input.brandName,
+            slug: input.brandSlug,
+          });
+        }
+
+        const brandId = brand?.id ?? 0;
+
+        // Set expiry to 90 days from now
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 90);
+
+        const accessRecord = await createAccountAccess({
+          brandId,
+          brandName: input.brandName,
+          contactEmail: input.contactEmail,
+          status: "requested",
+          metaAdAccountId: input.metaAdAccountId ?? null,
+          tiktokAdvertiserId: input.tiktokAdvertiserId ?? null,
+          notes: input.notes ?? null,
+          expiresAt,
+        });
+
+        // Notify the Tapline team
+        await notifyOwner({
+          title: `New Account Access Request: ${input.brandName}`,
+          content: `Brand: ${input.brandName}\nContact: ${input.contactEmail}\nMeta Account: ${input.metaAdAccountId ?? "not provided"}\nTikTok Advertiser: ${input.tiktokAdvertiserId ?? "not provided"}\nNotes: ${input.notes ?? "none"}`,
+        });
+
+        return {
+          success: true,
+          accessId: accessRecord?.id,
+          expiresAt,
+          instructions: buildAccessInstructions(input.metaAdAccountId, input.tiktokAdvertiserId),
+        };
+      }),
+
+    /**
+     * Get the current access status for a brand.
+     */
+    getStatus: publicProcedure
+      .input(z.object({ brandSlug: z.string() }))
+      .query(async ({ input }) => {
+        const brand = await getBrandBySlug(input.brandSlug);
+        if (!brand) return null;
+        return getAccountAccessByBrandId(brand.id);
+      }),
+
+    /**
+     * Confirm that access has been granted (brand notifies Tapline).
+     */
+    confirmGrant: publicProcedure
+      .input(
+        z.object({
+          accessId: z.number(),
+          metaGranted: z.boolean().default(false),
+          tiktokGranted: z.boolean().default(false),
+          metaAdAccountId: z.string().optional(),
+          tiktokAdvertiserId: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const updated = await updateAccountAccess(input.accessId, {
+          status: "pending",
+          metaAccessGranted: input.metaGranted,
+          tiktokAccessGranted: input.tiktokGranted,
+          ...(input.metaAdAccountId ? { metaAdAccountId: input.metaAdAccountId } : {}),
+          ...(input.tiktokAdvertiserId ? { tiktokAdvertiserId: input.tiktokAdvertiserId } : {}),
+        });
+
+        await notifyOwner({
+          title: `Access Grant Confirmed — Verify Now`,
+          content: `Access ID ${input.accessId} has been confirmed by the brand. Meta: ${input.metaGranted}, TikTok: ${input.tiktokGranted}. Please verify and activate.`,
+        });
+
+        return { success: true, record: updated };
+      }),
+
+    /**
+     * Admin: list all access requests.
+     */
+    list: protectedProcedure.query(async () => listAccountAccess()),
+  }),
 });
+
+/**
+ * Build step-by-step access instructions for the brand.
+ * Returns platform-specific instructions based on what account IDs were provided.
+ */
+function buildAccessInstructions(
+  metaAdAccountId?: string,
+  tiktokAdvertiserId?: string
+): {
+  meta?: string[];
+  tiktok?: string[];
+  summary: string;
+} {
+  const meta = metaAdAccountId
+    ? [
+        "Log in to Meta Business Manager (business.facebook.com)",
+        "Go to Business Settings → Users → Partners",
+        "Click 'Add' and enter the Tapline partner business ID: 123456789 (we will confirm this by email)",
+        "Under 'Assign Assets', select your Ad Account",
+        "Set the role to 'Analyst' — this is view-only and cannot create, edit, or spend",
+        "Click 'Save Changes'",
+        "The access will automatically expire after 90 days — you can revoke it at any time from Business Settings",
+      ]
+    : undefined;
+
+  const tiktok = tiktokAdvertiserId
+    ? [
+        "Log in to TikTok Ads Manager (ads.tiktok.com)",
+        "Go to Account → User Management → Members",
+        "Click 'Add Member' and enter the Tapline email: audit@tapline.co",
+        "Set the role to 'Viewer' — this is read-only and cannot create, edit, or spend",
+        "Set an access expiry of 90 days",
+        "Click 'Confirm'",
+        "You can remove access at any time from User Management",
+      ]
+    : undefined;
+
+  const platforms = [meta ? "Meta" : null, tiktok ? "TikTok" : null]
+    .filter(Boolean)
+    .join(" and ");
+
+  return {
+    meta,
+    tiktok,
+    summary: `We have sent you an email with these instructions. Once you have granted ${platforms} access, click the 'I've Granted Access' button below and we will verify the connection within 24 hours. Your access grant is read-only — Tapline cannot create, edit, pause, or spend on any of your campaigns.`,
+  };
+}
 
 export type AppRouter = typeof appRouter;

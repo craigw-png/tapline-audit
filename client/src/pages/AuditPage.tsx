@@ -14,6 +14,10 @@ import {
   CheckCircle2,
   Copy,
   ExternalLink,
+  Shield,
+  Lock,
+  Activity,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +67,7 @@ function getGrade(score: number): { grade: string; color: string; bg: string } {
 
 // ─── Andromeda Score Ring ─────────────────────────────────────────────────────
 
-function ScoreRing({ score, size = 120, label }: { score: number; size?: number; label?: string }) {
+function ScoreRing({ score, size = 120 }: { score: number; size?: number }) {
   const radius = (size - 16) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
@@ -72,43 +76,56 @@ function ScoreRing({ score, size = 120, label }: { score: number; size?: number;
     score >= 70 ? "oklch(0.75 0.16 155)" : score >= 50 ? "oklch(0.78 0.16 75)" : "oklch(0.62 0.22 25)";
 
   return (
-    <div className="flex flex-col items-center gap-2">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg width={size} height={size} className="rotate-[-90deg]">
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="oklch(0.22 0.015 264)" strokeWidth={8} />
-          <circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            fill="none"
-            stroke={strokeColor}
-            strokeWidth={8}
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            strokeLinecap="round"
-            className="score-ring"
-            style={{ filter: `drop-shadow(0 0 8px ${strokeColor})` }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className={`text-2xl font-bold ${color}`}>{grade}</span>
-          <span className="text-sm font-semibold text-foreground">{score}</span>
-        </div>
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="rotate-[-90deg]">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="oklch(0.22 0.015 264)" strokeWidth={8} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth={8}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 8px ${strokeColor})` }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-2xl font-bold ${color}`}>{grade}</span>
+        <span className="text-sm font-semibold text-foreground">{score}</span>
       </div>
-      {label && <span className="text-xs text-muted-foreground text-center">{label}</span>}
     </div>
   );
 }
 
 // ─── Sub-score Bar ────────────────────────────────────────────────────────────
 
-function SubScoreBar({ label, score, description }: { label: string; score: number; description: string }) {
+function SubScoreBar({
+  label,
+  score,
+  description,
+  benchmark,
+}: {
+  label: string;
+  score: number;
+  description: string;
+  benchmark?: string;
+}) {
   const color =
     score >= 70 ? "bg-emerald-500" : score >= 50 ? "bg-amber-500" : "bg-red-500";
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm font-medium">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{label}</span>
+          {benchmark && (
+            <span className="text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5">
+              {benchmark}
+            </span>
+          )}
+        </div>
         <span className="text-sm font-bold tabular-nums">{score}/100</span>
       </div>
       <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -118,6 +135,211 @@ function SubScoreBar({ label, score, description }: { label: string; score: numb
         />
       </div>
       <p className="text-xs text-muted-foreground mt-1">{description}</p>
+    </div>
+  );
+}
+
+// ─── Entity ID Risk Banner ────────────────────────────────────────────────────
+
+function EntityIdRiskBanner({ risk, conceptCount }: { risk: string; conceptCount: number }) {
+  const config = {
+    critical: {
+      bg: "bg-red-500/10 border-red-500/30",
+      icon: "text-red-400",
+      title: "Critical: Entity ID Collapse Risk",
+      body: `With ${conceptCount} estimated distinct creative concepts, Meta's Andromeda engine is likely consolidating your ads into a single Entity ID — throttling reach and inflating frequency. You need structural creative diversity, not just cosmetic variants.`,
+    },
+    high: {
+      bg: "bg-orange-500/10 border-orange-500/30",
+      icon: "text-orange-400",
+      title: "High: Entity ID Concentration Risk",
+      body: `${conceptCount} estimated creative concepts detected. Above ~60% similarity, Meta collapses ads into fewer Entity IDs, reducing auction eligibility. Diversifying hooks, copy angles, and creator voices will unlock more reach.`,
+    },
+    medium: {
+      bg: "bg-amber-500/10 border-amber-500/30",
+      icon: "text-amber-400",
+      title: "Moderate: Creative Concept Diversity",
+      body: `${conceptCount} estimated creative concepts. There is room to improve structural diversity — particularly in hook styles and copy angles — before the Andromeda engine begins penalising similarity.`,
+    },
+    low: {
+      bg: "bg-emerald-500/10 border-emerald-500/30",
+      icon: "text-emerald-400",
+      title: "Good: Creative Concept Diversity",
+      body: `${conceptCount} estimated creative concepts — strong structural diversity. The Andromeda engine is unlikely to collapse these into a single Entity ID. Maintain this variety as you scale spend.`,
+    },
+  };
+
+  const c = config[risk as keyof typeof config] ?? config.medium;
+
+  return (
+    <div className={`rounded-xl border p-4 ${c.bg}`}>
+      <div className="flex items-start gap-3">
+        <AlertTriangle className={`w-4 h-4 ${c.icon} flex-shrink-0 mt-0.5`} />
+        <div>
+          <p className={`text-sm font-semibold ${c.icon} mb-1`}>{c.title}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{c.body}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Account Level Metrics Panel ─────────────────────────────────────────────
+
+function AccountLevelPanel({
+  audit,
+  brandSlug,
+}: {
+  audit: Audit;
+  brandSlug: string;
+}) {
+  const [, navigate] = useLocation();
+
+  if (!audit.hasAccountData) {
+    return (
+      <div className="glass rounded-2xl p-6 border border-dashed border-white/10">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+            <Lock className="w-5 h-5 text-blue-400" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="font-semibold text-sm">Account-Level Audit</h3>
+              <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-[10px]">
+                Upgrade
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed mb-4">
+              Grant Tapline read-only access to your Meta Ads and TikTok Ads accounts to unlock
+              FTI, thumb-stop rate, hold rate, CPA delta, and Creative Similarity Score — the
+              metrics the playbook says actually predict Andromeda performance.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+              {[
+                { label: "FTI Score", desc: "Benchmark: 58%+" },
+                { label: "Thumb-Stop Rate", desc: "Benchmark: 25%+" },
+                { label: "Hold Rate", desc: "Benchmark: 15%+" },
+                { label: "CTR vs BAU", desc: "Target: 13–20% above" },
+                { label: "CPA Delta", desc: "Target: 10–25% lower" },
+                { label: "Creative Similarity", desc: "Risk: above 60%" },
+              ].map((m) => (
+                <div key={m.label} className="bg-white/[0.03] rounded-lg p-2.5">
+                  <p className="text-xs font-medium text-white/70">{m.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{m.desc}</p>
+                </div>
+              ))}
+            </div>
+            <Button
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-500 text-white gap-1.5"
+              onClick={() => navigate("/account-access")}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              Request access — 3 mins, read-only
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Account data is available
+  const ftiScore = (audit as any).ftiScore ?? 0;
+  const ctrPct = (audit as any).ctrPct ?? 0;
+  const thumbStop = (audit as any).thumbStopRate;
+  const holdRate = (audit as any).holdRate;
+  const cpaDelta = (audit as any).cpaDeltaPct;
+  const creativeSimilarity = (audit as any).creativeSimilarityScore;
+
+  const ftiZone =
+    ftiScore >= 58 ? "good" : ftiScore >= 40 ? "moderate" : "critical";
+
+  return (
+    <div className="glass rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-5">
+        <Activity className="w-4 h-4 text-blue-400" />
+        <h3 className="font-semibold">Account-Level Metrics</h3>
+        <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px] ml-auto">
+          Live Data
+        </Badge>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {/* FTI */}
+        <div className="bg-muted/30 rounded-xl p-4">
+          <p className="text-xs text-muted-foreground mb-1">First-Touch Incrementality</p>
+          <p
+            className={`text-2xl font-bold ${
+              ftiZone === "good"
+                ? "text-emerald-400"
+                : ftiZone === "moderate"
+                ? "text-amber-400"
+                : "text-red-400"
+            }`}
+          >
+            {ftiScore}%
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">Benchmark: 58%+</p>
+        </div>
+
+        {/* CTR */}
+        <div className="bg-muted/30 rounded-xl p-4">
+          <p className="text-xs text-muted-foreground mb-1">CTR vs Brand BAU</p>
+          <p className={`text-2xl font-bold ${ctrPct >= 13 ? "text-emerald-400" : "text-amber-400"}`}>
+            +{ctrPct.toFixed(1)}%
+          </p>
+          <p className="text-[10px] text-muted-foreground mt-1">Target: 13–20% above BAU</p>
+        </div>
+
+        {/* Thumb-Stop */}
+        {thumbStop !== undefined && (
+          <div className="bg-muted/30 rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-1">Thumb-Stop Rate</p>
+            <p className={`text-2xl font-bold ${thumbStop >= 25 ? "text-emerald-400" : "text-amber-400"}`}>
+              {thumbStop.toFixed(1)}%
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Benchmark: 25%+</p>
+          </div>
+        )}
+
+        {/* Hold Rate */}
+        {holdRate !== undefined && (
+          <div className="bg-muted/30 rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-1">Hold Rate</p>
+            <p className={`text-2xl font-bold ${holdRate >= 15 ? "text-emerald-400" : "text-amber-400"}`}>
+              {holdRate.toFixed(1)}%
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Benchmark: 15%+</p>
+          </div>
+        )}
+
+        {/* CPA Delta */}
+        {cpaDelta !== undefined && (
+          <div className="bg-muted/30 rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-1">CPA Delta vs BAU</p>
+            <p className={`text-2xl font-bold ${cpaDelta <= -10 ? "text-emerald-400" : "text-amber-400"}`}>
+              {cpaDelta > 0 ? "+" : ""}
+              {cpaDelta.toFixed(1)}%
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Target: 10–25% lower</p>
+          </div>
+        )}
+
+        {/* Creative Similarity */}
+        {creativeSimilarity !== undefined && (
+          <div className="bg-muted/30 rounded-xl p-4">
+            <p className="text-xs text-muted-foreground mb-1">Creative Similarity</p>
+            <p
+              className={`text-2xl font-bold ${
+                creativeSimilarity >= 60 ? "text-red-400" : "text-emerald-400"
+              }`}
+            >
+              {creativeSimilarity.toFixed(0)}%
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-1">Risk threshold: 60%</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -217,8 +439,12 @@ export default function AuditPage() {
   const formatScore = audit.formatScore ?? 0;
   const partnershipScore = audit.partnershipScore ?? 0;
   const durationScore = audit.durationScore ?? 0;
+  const conceptScore = (audit as any).conceptScore ?? 0;
+  const estimatedConcepts = (audit as any).estimatedConcepts ?? 0;
+  const entityIdRisk = (audit as any).entityIdRisk ?? "medium";
   const partnershipPct = ((audit.partnershipPct ?? 0) * 100).toFixed(1);
   const { grade, color: gradeColor, bg: gradeBg } = getGrade(andromedaScore);
+  const brandSlug = audit.brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
   // Format breakdown for donut chart
   const formatData = audit.formatBreakdown
@@ -240,11 +466,12 @@ export default function AuditPage() {
     })),
   ];
 
-  // Andromeda radar data
+  // Andromeda radar data — now 4 dimensions
   const radarData = [
-    { subject: "Format", A: formatScore, fullMark: 100 },
-    { subject: "Partnership", A: partnershipScore, fullMark: 100 },
-    { subject: "Duration", A: durationScore, fullMark: 100 },
+    { subject: "Format Diversity", A: formatScore, fullMark: 100 },
+    { subject: "Creator Signal", A: partnershipScore, fullMark: 100 },
+    { subject: "Creative Freshness", A: durationScore, fullMark: 100 },
+    { subject: "Concept Ratio", A: conceptScore, fullMark: 100 },
   ];
 
   const creatorGap = audit.creatorGapData;
@@ -300,12 +527,17 @@ export default function AuditPage() {
                 <Badge variant="secondary" className="text-xs capitalize">
                   {audit.platform}
                 </Badge>
+                {(audit as any).hasAccountData && (
+                  <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20 text-xs">
+                    Account-Level Data
+                  </Badge>
+                )}
               </div>
               <h1 className="text-2xl md:text-3xl font-bold mb-1">{audit.brandName}</h1>
               <p className="text-muted-foreground text-sm">
-                Creator Partnership Audit · {audit.totalAds ?? 0} ads analysed
+                Andromeda Readiness Audit · {audit.totalAds ?? 0} ads analysed
               </p>
-              <div className="flex items-center gap-4 mt-4">
+              <div className="flex flex-wrap items-center gap-4 mt-4">
                 <div>
                   <p className="text-xs text-muted-foreground">Est. Spend</p>
                   <p className="font-semibold text-sm">
@@ -326,14 +558,19 @@ export default function AuditPage() {
                     {audit.partnershipAds ?? 0} / {audit.totalAds ?? 0} ({partnershipPct}%)
                   </p>
                 </div>
+                <div className="w-px h-8 bg-border" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Est. Concepts</p>
+                  <p className="font-semibold text-sm">{estimatedConcepts}</p>
+                </div>
               </div>
             </div>
 
-            {/* Andromeda Score */}
+            {/* Andromeda Readiness Score */}
             <div className="flex items-center gap-6">
               <div className="text-center">
                 <ScoreRing score={andromedaScore} size={130} />
-                <p className="text-xs text-muted-foreground mt-2">Andromeda Score</p>
+                <p className="text-xs text-muted-foreground mt-2">Andromeda Readiness</p>
               </div>
               <div className={`px-4 py-3 rounded-xl border ${gradeBg} text-center`}>
                 <p className={`text-4xl font-bold ${gradeColor}`}>{grade}</p>
@@ -343,36 +580,43 @@ export default function AuditPage() {
           </div>
         </div>
 
+        {/* Entity ID Risk Banner — shown when risk is critical or high */}
+        {(entityIdRisk === "critical" || entityIdRisk === "high") && (
+          <div className="mb-6">
+            <EntityIdRiskBanner risk={entityIdRisk} conceptCount={estimatedConcepts} />
+          </div>
+        )}
+
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {[
             {
-              label: "Total Ads",
-              value: audit.totalAds ?? 0,
+              label: "Format Diversity Index",
+              value: formatScore,
               icon: BarChart3,
-              color: "text-blue-400",
-              sub: `${audit.metaAdsData?.totalAds ?? 0} Meta · ${audit.tiktokAdsData?.totalAds ?? 0} TikTok`,
+              color: formatScore >= 70 ? "text-emerald-400" : "text-amber-400",
+              sub: "Ad format structural variety",
             },
             {
-              label: "Partnership Ads",
+              label: "Creator Signal Score",
               value: `${partnershipPct}%`,
               icon: Users,
               color: parseFloat(partnershipPct) >= 30 ? "text-emerald-400" : "text-red-400",
-              sub: `Target: 30%+`,
+              sub: "Target: 30%+ partnership ads",
             },
             {
-              label: "Format Score",
-              value: formatScore,
-              icon: Target,
-              color: formatScore >= 70 ? "text-emerald-400" : "text-amber-400",
-              sub: "Creative diversity",
-            },
-            {
-              label: "Duration Score",
+              label: "Creative Freshness Score",
               value: durationScore,
               icon: TrendingUp,
               color: durationScore >= 70 ? "text-emerald-400" : "text-amber-400",
-              sub: "Freshness / fatigue",
+              sub: "Ad flight duration & fatigue",
+            },
+            {
+              label: "Volume-to-Concept Ratio",
+              value: conceptScore,
+              icon: Target,
+              color: conceptScore >= 70 ? "text-emerald-400" : entityIdRisk === "critical" ? "text-red-400" : "text-amber-400",
+              sub: `~${estimatedConcepts} distinct concepts`,
             },
           ].map(({ label, value, icon: Icon, color, sub }) => (
             <div key={label} className="glass rounded-xl p-4">
@@ -393,6 +637,12 @@ export default function AuditPage() {
             <TabsTrigger value="andromeda" className="text-xs">Andromeda Score</TabsTrigger>
             <TabsTrigger value="creators" className="text-xs">Creator Gap</TabsTrigger>
             <TabsTrigger value="competitors" className="text-xs">Competitors</TabsTrigger>
+            <TabsTrigger value="account" className="text-xs">
+              Account Audit
+              {!(audit as any).hasAccountData && (
+                <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+              )}
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -456,18 +706,8 @@ export default function AuditPage() {
                 </h3>
                 <div className="space-y-4">
                   {[
-                    {
-                      label: "Meta",
-                      data: audit.metaAdsData,
-                      color: "bg-blue-500",
-                      icon: "📘",
-                    },
-                    {
-                      label: "TikTok",
-                      data: audit.tiktokAdsData,
-                      color: "bg-pink-500",
-                      icon: "🎵",
-                    },
+                    { label: "Meta", data: audit.metaAdsData, color: "bg-blue-500", icon: "📘" },
+                    { label: "TikTok", data: audit.tiktokAdsData, color: "bg-pink-500", icon: "🎵" },
                   ].map(({ label, data, color, icon }) => (
                     <div key={label} className="bg-muted/30 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
@@ -514,10 +754,10 @@ export default function AuditPage() {
             <div className="glass rounded-2xl p-5">
               <h3 className="font-semibold mb-1 flex items-center gap-2">
                 <Users className="w-4 h-4 text-primary" />
-                Partnership Gap vs. Competitors
+                Creator Signal Gap vs. Competitors
               </h3>
               <p className="text-xs text-muted-foreground mb-4">
-                % of ads featuring creator partnerships. Target benchmark: 30%+
+                % of ads featuring creator partnerships. Andromeda benchmark: 30%+
               </p>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={gapData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -557,20 +797,28 @@ export default function AuditPage() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
+            {/* Entity ID risk (medium/low shown here in overview) */}
+            {(entityIdRisk === "medium" || entityIdRisk === "low") && (
+              <EntityIdRiskBanner risk={entityIdRisk} conceptCount={estimatedConcepts} />
+            )}
           </TabsContent>
 
           {/* Andromeda Tab */}
           <TabsContent value="andromeda" className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Radar */}
+              {/* Radar — now 4 dimensions */}
               <div className="glass rounded-2xl p-5">
-                <h3 className="font-semibold mb-4">Andromeda Radar</h3>
-                <ResponsiveContainer width="100%" height={260}>
+                <h3 className="font-semibold mb-1">Andromeda Readiness Radar</h3>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Four dimensions Meta's algorithm uses to determine creative Entity ID assignment
+                </p>
+                <ResponsiveContainer width="100%" height={280}>
                   <RadarChart data={radarData}>
                     <PolarGrid stroke="oklch(0.22 0.015 264)" />
                     <PolarAngleAxis
                       dataKey="subject"
-                      tick={{ fill: "oklch(0.58 0.02 264)", fontSize: 12 }}
+                      tick={{ fill: "oklch(0.58 0.02 264)", fontSize: 11 }}
                     />
                     <Radar
                       name="Score"
@@ -584,44 +832,64 @@ export default function AuditPage() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Sub-scores */}
+              {/* Sub-scores — 4 named dimensions */}
               <div className="glass rounded-2xl p-5 space-y-5">
-                <h3 className="font-semibold">Sub-Score Breakdown</h3>
+                <div>
+                  <h3 className="font-semibold mb-0.5">Andromeda Sub-Scores</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Each dimension maps to a signal Meta's Andromeda engine reads when assigning Entity IDs
+                  </p>
+                </div>
                 <SubScoreBar
-                  label="Format Score"
+                  label="Format Diversity Index"
                   score={formatScore}
-                  description="Diversity of ad formats (video, image, carousel, collection)"
+                  description="Structural variety across video, image, carousel, and collection formats"
+                  benchmark="Target: 4 formats"
                 />
                 <SubScoreBar
-                  label="Partnership Score"
+                  label="Creator Signal Score"
                   score={partnershipScore}
-                  description={`${partnershipPct}% of ads feature creator partnerships (target: 30%+)`}
+                  description={`${partnershipPct}% of ads feature creator partnerships — Andromeda benchmark is 30%+`}
+                  benchmark="Target: 30%+"
                 />
                 <SubScoreBar
-                  label="Duration Score"
+                  label="Creative Freshness Score"
                   score={durationScore}
-                  description="Creative freshness — lower scores indicate ad fatigue risk"
+                  description="Ad flight duration and creative rotation — lower scores indicate fatigue risk"
+                  benchmark="Optimal: 14–28 days"
+                />
+                <SubScoreBar
+                  label="Volume-to-Concept Ratio"
+                  score={conceptScore}
+                  description={`~${estimatedConcepts} structurally distinct concepts detected. Above ~60% similarity, Meta collapses ads into fewer Entity IDs.`}
+                  benchmark="Risk: <5 concepts"
                 />
               </div>
             </div>
+
+            {/* Entity ID risk — always shown in Andromeda tab */}
+            <EntityIdRiskBanner risk={entityIdRisk} conceptCount={estimatedConcepts} />
 
             {/* Insights */}
             <div className="glass rounded-2xl p-5">
               <h3 className="font-semibold mb-4 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400" />
-                Andromeda Insights
+                Andromeda Readiness Insights
               </h3>
               <div className="space-y-3">
                 {[
                   parseFloat(partnershipPct) < 30
-                    ? `Only ${partnershipPct}% of ads feature creator partnerships — well below the 30% Andromeda benchmark. This is the single biggest opportunity.`
-                    : `Strong creator partnership investment at ${partnershipPct}% — above the 30% benchmark.`,
+                    ? `Creator Signal Score is below the 30% Andromeda benchmark at ${partnershipPct}%. This is the single highest-leverage improvement — each creator partnership introduces a new Entity ID, expanding reach eligibility.`
+                    : `Strong Creator Signal Score at ${partnershipPct}% — above the 30% benchmark. Each creator partnership introduces a distinct Entity ID, maximising auction eligibility.`,
                   formatScore < 75
-                    ? "Creative formats are concentrated. Diversifying into video, carousel, and collection formats will improve algorithm performance."
-                    : "Excellent format diversity across all four creative types.",
+                    ? "Format Diversity Index is below optimal. Concentrating spend in a single format (typically video) reduces Entity ID variety. Adding carousel and collection formats will improve Andromeda readiness."
+                    : "Excellent Format Diversity Index — structural variety across all four creative types is maximising Entity ID distribution.",
+                  conceptScore < 60
+                    ? `Volume-to-Concept Ratio is low (~${estimatedConcepts} concepts for ${audit.totalAds} ads). Meta's Andromeda engine is likely treating many of these as the same Entity ID. Structural creative diversity — different hooks, copy angles, and creator voices — is needed, not just cosmetic variants.`
+                    : `Volume-to-Concept Ratio is healthy (~${estimatedConcepts} concepts). Structural creative diversity is sufficient to avoid Entity ID collapse at current ad volume.`,
                   durationScore < 70
-                    ? "Average ad flight duration signals creative fatigue risk. Refreshing creatives more frequently is recommended."
-                    : "Ad flight duration is within the optimal freshness range.",
+                    ? "Creative Freshness Score indicates ad fatigue risk. Ads running beyond 28 days without rotation signal creative exhaustion to the algorithm. A regular refresh cadence is recommended."
+                    : "Creative Freshness Score is within the optimal range — ad flight duration is not signalling fatigue to the Andromeda engine.",
                 ].map((insight, i) => (
                   <div key={i} className="flex gap-3 p-3 bg-muted/30 rounded-xl">
                     <div className="w-5 h-5 rounded-full bg-primary/20 flex items-center justify-center shrink-0 mt-0.5">
@@ -638,7 +906,6 @@ export default function AuditPage() {
           <TabsContent value="creators" className="space-y-6">
             {creatorGap ? (
               <>
-                {/* Summary */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="glass rounded-xl p-4 text-center">
                     <p className="text-3xl font-bold text-amber-400">{creatorGap.gapCount}</p>
@@ -657,14 +924,13 @@ export default function AuditPage() {
                   </div>
                 </div>
 
-                {/* Gap creators */}
                 <div className="glass rounded-2xl p-5">
                   <h3 className="font-semibold mb-1 flex items-center gap-2">
                     <Users className="w-4 h-4 text-amber-400" />
                     Untapped Creator Opportunities
                   </h3>
                   <p className="text-xs text-muted-foreground mb-4">
-                    These creators are already organically mentioning {audit.brandName} but are not in paid partnerships.
+                    These creators are already organically mentioning {audit.brandName} but are not in paid partnerships. Each one represents a new Entity ID and a distinct audience signal.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {gapCreators.map((creator) => (
@@ -673,7 +939,6 @@ export default function AuditPage() {
                   </div>
                 </div>
 
-                {/* Active partners */}
                 <div className="glass rounded-2xl p-5">
                   <h3 className="font-semibold mb-4 flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
@@ -710,11 +975,10 @@ export default function AuditPage() {
           <TabsContent value="competitors" className="space-y-6">
             {competitors.length > 0 ? (
               <>
-                {/* Andromeda comparison chart */}
                 <div className="glass rounded-2xl p-5">
                   <h3 className="font-semibold mb-4 flex items-center gap-2">
                     <Target className="w-4 h-4 text-primary" />
-                    Andromeda Score Comparison
+                    Andromeda Readiness Score Comparison
                   </h3>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart
@@ -742,7 +1006,7 @@ export default function AuditPage() {
                         domain={[0, 100]}
                       />
                       <Tooltip
-                        formatter={(v: number) => [v, "Andromeda Score"]}
+                        formatter={(v: number) => [v, "Andromeda Readiness Score"]}
                         contentStyle={{
                           background: "oklch(0.14 0.012 264)",
                           border: "1px solid oklch(0.22 0.015 264)",
@@ -761,7 +1025,6 @@ export default function AuditPage() {
                   </ResponsiveContainer>
                 </div>
 
-                {/* Competitor table */}
                 <div className="glass rounded-2xl overflow-hidden">
                   <div className="p-5 border-b border-border">
                     <h3 className="font-semibold">Competitor Benchmarks</h3>
@@ -772,7 +1035,7 @@ export default function AuditPage() {
                         <tr className="border-b border-border">
                           <th className="text-left p-4 text-xs text-muted-foreground font-medium">Brand</th>
                           <th className="text-right p-4 text-xs text-muted-foreground font-medium">Total Ads</th>
-                          <th className="text-right p-4 text-xs text-muted-foreground font-medium">Partnership %</th>
+                          <th className="text-right p-4 text-xs text-muted-foreground font-medium">Creator Signal</th>
                           <th className="text-right p-4 text-xs text-muted-foreground font-medium">Andromeda</th>
                           <th className="text-right p-4 text-xs text-muted-foreground font-medium">Est. Spend</th>
                         </tr>
@@ -825,6 +1088,11 @@ export default function AuditPage() {
                 <p className="text-muted-foreground">No competitor data available.</p>
               </div>
             )}
+          </TabsContent>
+
+          {/* Account Audit Tab */}
+          <TabsContent value="account" className="space-y-6">
+            <AccountLevelPanel audit={audit} brandSlug={brandSlug} />
           </TabsContent>
         </Tabs>
 

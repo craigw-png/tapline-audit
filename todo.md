@@ -44,3 +44,19 @@
 - [x] Vitest unit tests for Andromeda scoring engine (8 tests, all passing)
 - [x] Vitest test for auth logout
 - [x] Final checkpoint and delivery
+
+## Phase 7: Score Restructure + Account-Level Audit Tier
+- [x] Rename Andromeda sub-scores: Format Diversity Index, Creator Signal Score, Creative Freshness Score
+- [x] Add 4th sub-score: Volume-to-Concept Ratio (concept concentration heuristic)
+- [x] Update score weights: 25% format, 40% partnership, 15% duration, 20% concept ratio
+- [x] Add Entity ID concentration risk flag to scoring engine and schema
+- [x] Extend audit schema with account-level metrics columns (CTR, thumbStopRate, holdRate, cpaDelta, ftiScore, creativeSimilarityScore)
+- [x] Build Meta Marketing API connector (ads_read scope) for account-level data
+- [x] Build TikTok Ads API connector for account-level data
+- [x] Add account_access table and tRPC procedures for managing client access grants
+- [x] Build Account Access onboarding UI with step-by-step instructions
+- [x] Add access level badge to audit dashboard (Public vs Account-Level)
+- [x] Add account-level metrics section to audit dashboard (FTI gauge, CTR, thumb-stop, hold rate, CPA delta)
+- [x] Update PDF export to include account-level section when available
+- [x] Update Andromeda scoring tests
+- [x] Save checkpoint and deliver
