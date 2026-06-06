@@ -69,3 +69,12 @@
 - [x] Add META_ACCESS_TOKEN secret (token valid, awaiting Meta identity verification for ads_library access)
 - [x] Token validation test passes — Ads Library query awaiting Meta app verification (error 2332002)
 - [x] Save checkpoint and deliver
+
+## Phase 9: TikTok Shop Intelligence Layer
+- [x] Research TikTok Creative Center API endpoints and auth
+- [x] Build TikTok Creative Center connector (top creators by GMV, trending products, top Shop videos) — unofficial Creative Center endpoints + rich mock fallback
+- [x] Extend schema with tiktokShopData JSON column on audits
+- [x] Build TikTok Shop Intelligence UI section in audit dashboard — new TikTok Shop tab with creator GMV table, trending products, top videos, shop presence comparison
+- [x] Mock data: kitchen appliances, beauty, fashion categories — UK market
+- [x] Write tests for the new connector (10 tests, all passing)
+- [x] Save checkpoint and deliver

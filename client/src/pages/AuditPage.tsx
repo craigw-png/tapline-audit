@@ -42,6 +42,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import type { Audit, AuditCompetitor, CreatorGapData } from "@/types/audit";
+import TikTokShopIntelligenceSection from "@/components/TikTokShopIntelligence";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -636,6 +637,12 @@ export default function AuditPage() {
             <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
             <TabsTrigger value="andromeda" className="text-xs">Andromeda Score</TabsTrigger>
             <TabsTrigger value="creators" className="text-xs">Creator Gap</TabsTrigger>
+            <TabsTrigger value="tiktokshop" className="text-xs">
+              <span className="flex items-center gap-1">
+                TikTok Shop
+                <span className="text-[9px] px-1 py-0.5 rounded bg-[#69C9D0]/20 text-[#69C9D0] font-medium leading-none">NEW</span>
+              </span>
+            </TabsTrigger>
             <TabsTrigger value="competitors" className="text-xs">Competitors</TabsTrigger>
             <TabsTrigger value="account" className="text-xs">
               Account Audit
@@ -1086,6 +1093,20 @@ export default function AuditPage() {
             ) : (
               <div className="glass rounded-2xl p-10 text-center">
                 <p className="text-muted-foreground">No competitor data available.</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* TikTok Shop Intelligence Tab */}
+          <TabsContent value="tiktokshop" className="space-y-6">
+            {audit.tiktokShopData ? (
+              <TikTokShopIntelligenceSection
+                data={audit.tiktokShopData}
+                brandName={audit.brandName}
+              />
+            ) : (
+              <div className="glass rounded-2xl p-10 text-center">
+                <p className="text-muted-foreground">TikTok Shop data is not available for this audit.</p>
               </div>
             )}
           </TabsContent>

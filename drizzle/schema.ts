@@ -109,6 +109,9 @@ export const audits = mysqlTable("audits", {
   /** Full account-level data payload */
   accountLevelData: json("accountLevelData").$type<AccountLevelData>(),
 
+  // TikTok Shop Intelligence data (Creative Center + Affiliate API)
+  tiktokShopData: json("tiktokShopData").$type<TikTokShopIntelligence>(),
+
   usedMockData: boolean("usedMockData").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -260,4 +263,123 @@ export interface AccountLevelData {
   dataAsOf: string; // ISO date
   metaAdAccountId?: string;
   tiktokAdvertiserId?: string;
+}
+
+/**
+ * TikTok Shop Intelligence data — populated from the TikTok Creative Center
+ * (unofficial endpoints, same data the TikTok web UI uses) and, once TikTok
+ * Shop Partner status is approved, from the official Affiliate API.
+ *
+ * Data is scoped to the brand's primary product category and country (default: GB).
+ */
+export interface TikTokShopIntelligence {
+  /** ISO date the data was fetched */
+  dataAsOf: string;
+  /** Whether this is mock/demo data or live from the API */
+  isMock: boolean;
+  /** Product category used for the category-level queries */
+  category: string;
+  /** Country code (default: GB) */
+  country: string;
+
+  /** Top creators driving GMV in this brand's category */
+  topCreatorsByGmv: TikTokShopCreator[];
+
+  /** Trending products in this brand's category */
+  trendingProducts: TikTokShopProduct[];
+
+  /** Top-performing Shop videos in this brand's category */
+  topShopVideos: TikTokShopVideo[];
+
+  /** Brand's own TikTok Shop presence (if available) */
+  brandShopPresence?: {
+    hasShop: boolean;
+    totalProducts?: number;
+    activeAffiliates?: number;
+    estimatedMonthlyGmv?: string;
+    openCollaboration: boolean;
+  };
+
+  /** Competitor TikTok Shop presence */
+  competitorShopData?: TikTokShopCompetitor[];
+
+  /** Category-level benchmarks */
+  categoryBenchmarks: {
+    avgCreatorGmv: string;
+    avgConversionRate: number;
+    avgCommissionRate: number;
+    topCreatorFollowerRange: string;
+    dominantContentType: "video" | "live" | "mixed";
+  };
+}
+
+export interface TikTokShopCreator {
+  handle: string;
+  displayName: string;
+  followers: number;
+  /** Estimated monthly GMV in GBP */
+  estimatedGmv: string;
+  /** Number of products actively promoted */
+  activeProducts: number;
+  /** Average engagement rate (%) */
+  avgEngagement: number;
+  /** Creator tier */
+  tier: "nano" | "micro" | "mid" | "macro" | "mega";
+  /** Whether this creator is already partnered with the audited brand */
+  isPartnerOfBrand: boolean;
+  /** Primary content niche */
+  niche: string;
+  /** Audience demographics */
+  audienceDemographics?: {
+    primaryGender: "female" | "male" | "mixed";
+    primaryAgeRange: string;
+    topCountry: string;
+  };
+}
+
+export interface TikTokShopProduct {
+  productId: string;
+  productName: string;
+  category: string;
+  /** Estimated monthly sales volume */
+  estimatedMonthlySales: number;
+  /** Price in GBP */
+  price: number;
+  /** Commission rate (%) */
+  commissionRate: number;
+  /** Number of active creator affiliates */
+  activeAffiliates: number;
+  /** Sales velocity trend */
+  trend: "rising" | "stable" | "declining";
+  /** Whether this is a competitor product */
+  isCompetitorProduct: boolean;
+  competitorBrand?: string;
+}
+
+export interface TikTokShopVideo {
+  videoId: string;
+  creatorHandle: string;
+  creatorFollowers: number;
+  /** Estimated GMV driven by this video */
+  estimatedGmv: string;
+  views: number;
+  likes: number;
+  /** Conversion rate (%) */
+  conversionRate: number;
+  /** Video hook type */
+  hookType: "demo" | "testimonial" | "unboxing" | "tutorial" | "lifestyle" | "ugc";
+  /** Duration in seconds */
+  durationSeconds: number;
+  /** Whether this video uses a product from the audited brand or competitor */
+  brandType: "target" | "competitor" | "category";
+}
+
+export interface TikTokShopCompetitor {
+  brandName: string;
+  hasShop: boolean;
+  totalProducts?: number;
+  activeAffiliates?: number;
+  estimatedMonthlyGmv?: string;
+  openCollaboration: boolean;
+  topCreatorCount?: number;
 }

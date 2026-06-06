@@ -29,6 +29,7 @@ import {
 } from "./mockData";
 import { fetchBrandAdData, searchMetaPages, resolveMetaPageId } from "./apiConnectors";
 import { fetchAccountLevelData } from "./accountConnectors";
+import { fetchTikTokShopIntelligence } from "./tiktokShopConnector";
 import { notifyOwner } from "./_core/notification";
 
 export const appRouter = router({
@@ -220,7 +221,14 @@ export const appRouter = router({
           avgDurationDays,
         });
 
-        // 6. Check for account-level access
+        // 6. Fetch TikTok Shop Intelligence
+        const tiktokShopData = await fetchTikTokShopIntelligence(
+          input.brandName,
+          input.competitors,
+          "GB"
+        );
+
+        // 7. Check for account-level access
         const accessGrant = brandId ? await getAccountAccessByBrandId(brandId) : null;
         let accountLevelData = null;
         let hasAccountData = false;
@@ -237,7 +245,7 @@ export const appRouter = router({
           hasAccountData = accountLevelData !== null;
         }
 
-        // 7. Update audit with results
+        // 8. Update audit with results
         const updatedAudit = await updateAudit(audit.id, {
           status: "complete",
           totalAds,
@@ -258,6 +266,7 @@ export const appRouter = router({
           metaAdsData: meta,
           tiktokAdsData: tiktok,
           creatorGapData: creatorGap,
+          tiktokShopData,
           usedMockData,
           hasAccountData,
           ...(accountLevelData
@@ -273,7 +282,7 @@ export const appRouter = router({
             : {}),
         });
 
-        // 8. Process competitors
+        // 9. Process competitors
         const competitorNames =
           input.competitors.length > 0
             ? input.competitors

@@ -1,0 +1,1 @@
+ALTER TABLE `audits` ADD `tiktokShopData` json;

@@ -53,6 +53,70 @@ export interface AuditCompetitor {
   createdAt: Date;
 }
 
+// ─── TikTok Shop Intelligence Types ─────────────────────────────────────────
+
+export interface TikTokShopCreatorFE {
+  handle: string;
+  niche: string;
+  followers: number;
+  avgEngagement: number;
+  estimatedGmv: string;
+  tier: "nano" | "micro" | "mid" | "macro" | "mega";
+  isPartnerOfBrand: boolean;
+  contentStyle: string;
+}
+
+export interface TikTokShopProductFE {
+  productId: string;
+  productName: string;
+  category: string;
+  price: number;
+  commissionRate: number;
+  estimatedMonthlySales: number;
+  activeAffiliates: number;
+  trend: "rising" | "stable" | "declining";
+  isCompetitorProduct: boolean;
+  competitorBrand?: string;
+}
+
+export interface TikTokShopVideoFE {
+  videoId: string;
+  creatorHandle: string;
+  creatorFollowers: number;
+  views: number;
+  conversionRate: number;
+  estimatedGmv: string;
+  hookType: string;
+  durationSeconds: number;
+  brandType: "target" | "competitor" | "category";
+}
+
+export interface TikTokShopPresenceFE {
+  hasShop: boolean;
+  totalProducts?: number;
+  activeAffiliates?: number;
+  estimatedMonthlyGmv?: string;
+  openCollaboration?: boolean;
+}
+
+export interface TikTokShopIntelligenceData {
+  category: string;
+  country: string;
+  dataAsOf: string;
+  isMock: boolean;
+  topCreatorsByGmv: TikTokShopCreatorFE[];
+  trendingProducts: TikTokShopProductFE[];
+  topShopVideos: TikTokShopVideoFE[];
+  brandShopPresence?: TikTokShopPresenceFE;
+  competitorShopData?: (TikTokShopPresenceFE & { brandName: string })[];
+  categoryBenchmarks: {
+    avgCreatorGmv: string;
+    avgConversionRate: number;
+    avgCommissionRate: number;
+    topCreatorFollowerRange: string;
+  };
+}
+
 export interface Audit {
   id: number;
   shareId: string;
@@ -89,6 +153,7 @@ export interface Audit {
   metaAdsData: AdDataSnapshot | null;
   tiktokAdsData: AdDataSnapshot | null;
   creatorGapData: CreatorGapData | null;
+  tiktokShopData: TikTokShopIntelligenceData | null;
   usedMockData: boolean | null;
 
   // ─── Account-Level Metrics (requires access grant) ────────────────────────
