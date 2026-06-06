@@ -27,7 +27,7 @@ import {
   getCompetitorMocks,
   COMPETITOR_MOCKS,
 } from "./mockData";
-import { fetchBrandAdData } from "./apiConnectors";
+import { fetchBrandAdData, searchMetaPages, resolveMetaPageId } from "./apiConnectors";
 import { fetchAccountLevelData } from "./accountConnectors";
 import { notifyOwner } from "./_core/notification";
 
@@ -67,22 +67,47 @@ export const appRouter = router({
     resolve: publicProcedure
       .input(z.object({ query: z.string().min(1) }))
       .mutation(async ({ input }) => {
+        // 1. Try mock resolution first (known brands with pre-set page IDs)
         const mock = resolveBrandMock(input.query);
-        if (!mock) return null;
+
+        // 2. If no mock, attempt live Meta page resolution
+        let metaPageId: string | null = mock?.metaPageId || null;
+        let resolvedName = mock?.name ?? input.query;
+
+        if (!metaPageId && process.env.META_ACCESS_TOKEN) {
+          const livePageId = await resolveMetaPageId(input.query);
+          if (livePageId) {
+            metaPageId = livePageId;
+            console.log(`[Brand Resolve] Live Meta page resolved: ${input.query} → ${livePageId}`);
+          }
+        }
+
+        const slug = (mock?.slug ?? input.query.toLowerCase().replace(/[^a-z0-9]+/g, "-")).trim();
+
         const brand = await upsertBrand({
-          name: mock.name,
-          slug: mock.slug,
-          metaPageId: mock.metaPageId || null,
-          tiktokHandle: mock.tiktokHandle || null,
-          industry: mock.industry,
+          name: resolvedName,
+          slug,
+          metaPageId: metaPageId,
+          tiktokHandle: mock?.tiktokHandle || null,
+          industry: mock?.industry ?? "Consumer Goods",
         });
+
         return {
           brand,
-          competitorSuggestions: mock.competitorSlugs.map((slug) => {
-            const comp = COMPETITOR_MOCKS[slug];
-            return comp ? { name: comp.name, slug } : { name: slug, slug };
+          competitorSuggestions: (mock?.competitorSlugs ?? []).map((s) => {
+            const comp = COMPETITOR_MOCKS[s];
+            return comp ? { name: comp.name, slug: s } : { name: s, slug: s };
           }),
+          resolvedMetaPageId: metaPageId,
         };
+      }),
+
+    // Live Meta page search — used for brand search typeahead when token is available
+    searchMetaPages: publicProcedure
+      .input(z.object({ query: z.string().min(2) }))
+      .query(async ({ input }) => {
+        if (!process.env.META_ACCESS_TOKEN) return [];
+        return searchMetaPages(input.query, 5);
       }),
 
     get: publicProcedure
@@ -162,6 +187,16 @@ export const appRouter = router({
         );
         const { meta, tiktok } = adData;
         const usedMockData = adData.usedMockData;
+
+        // Persist resolved Meta page ID if it was discovered during this audit
+        if (adData.resolvedMetaPageId && !brandRecord?.metaPageId && brandId) {
+          await upsertBrand({
+            name: input.brandName,
+            slug: input.brandSlug,
+            metaPageId: adData.resolvedMetaPageId,
+          });
+          console.log(`[Audit] Persisted resolved Meta page ID ${adData.resolvedMetaPageId} for ${input.brandName}`);
+        }
         const { creatorGap } = getMockAdData(input.brandSlug);
 
         // 4. Combine Meta + TikTok

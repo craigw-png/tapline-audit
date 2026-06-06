@@ -217,7 +217,7 @@ export default function NewAuditPage() {
           )}
         </Button>
         <p className="text-center text-xs text-muted-foreground mt-3">
-          Using demo data — live Meta & TikTok API integration coming soon
+          Live Meta Ads Library data when token is configured · TikTok integration coming soon
         </p>
       </main>
     </div>

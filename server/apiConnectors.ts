@@ -4,39 +4,132 @@
  * Meta Ads Library API and TikTok Commercial Content API connectors.
  * Each connector attempts the live API first, then falls back to mock data
  * if the API is unavailable (pending verification, rate limited, or in error).
+ *
+ * Meta Ads Library API notes:
+ * - Base URL: https://graph.facebook.com/v21.0/ads_archive
+ * - Auth: User Access Token with ads_library permission
+ * - Partnership detection: scan ad_creative_bodies for partnership signals
+ *   (bylines field is only available for POLITICAL_AND_ISSUE_ADS)
+ * - Format detection: media_type field (IMAGE, VIDEO, MEME, NONE)
+ *   + ad_creative_bodies count for carousel detection
+ * - Spend/impressions: available as range strings e.g. "1000-5000"
+ * - Rate limit: 200 calls per hour per token (error 613)
  */
 
 import type { AdDataSnapshot } from "../drizzle/schema";
 import { getMockAdData } from "./mockData";
 
-// ─── Meta Ads Library API ─────────────────────────────────────────────────────
+const META_GRAPH_VERSION = "v21.0";
+const META_BASE_URL = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
-interface MetaAdsAPIConfig {
-  accessToken: string;
-  pageId: string;
-  period: string; // "YYYY-MM"
+// ─── Partnership Signal Detection ─────────────────────────────────────────────
+
+/**
+ * Keywords and patterns that indicate a creator partnership ad.
+ * Meta partnership ads typically include these in the ad body text.
+ */
+const PARTNERSHIP_SIGNALS = [
+  "paid partnership",
+  "paid collaboration",
+  "in collaboration with",
+  "gifted by",
+  "gifted:",
+  "#ad",
+  "#paidpartnership",
+  "#sponsored",
+  "#gifted",
+  "#brandpartner",
+  "#brandambassador",
+  "#collab",
+  "sponsored by",
+  "in partnership with",
+  "ambassador",
+  "creator partner",
+];
+
+function isPartnershipAd(bodies: string[]): boolean {
+  const combined = bodies.join(" ").toLowerCase();
+  return PARTNERSHIP_SIGNALS.some((signal) => combined.includes(signal.toLowerCase()));
 }
 
-interface MetaAdRecord {
+// ─── Spend Range Parser ────────────────────────────────────────────────────────
+
+/**
+ * Parse Meta spend range strings into numeric bounds.
+ * Meta returns ranges like "<1000", "1000-5000", ">1000000"
+ */
+function parseSpendRange(range: { lower_bound?: string; upper_bound?: string } | undefined): {
+  min: number;
+  max: number;
+} {
+  if (!range) return { min: 0, max: 0 };
+  const min = parseInt(range.lower_bound ?? "0", 10) || 0;
+  const max = parseInt(range.upper_bound ?? range.lower_bound ?? "0", 10) || 0;
+  return { min, max };
+}
+
+function parseImpressionRange(impressionStr: string | undefined): { min: number; max: number } {
+  if (!impressionStr) return { min: 0, max: 0 };
+  // Meta returns strings like "<1000", "1K-5K", "5K-10K", "10K-50K", ">1M"
+  const clean = impressionStr.replace(/,/g, "").trim();
+  if (clean.startsWith("<")) {
+    const val = parseKM(clean.slice(1));
+    return { min: 0, max: val };
+  }
+  if (clean.startsWith(">")) {
+    const val = parseKM(clean.slice(1));
+    return { min: val, max: val * 2 };
+  }
+  const parts = clean.split("-");
+  if (parts.length === 2) {
+    return { min: parseKM(parts[0]), max: parseKM(parts[1]) };
+  }
+  const val = parseKM(clean);
+  return { min: val, max: val };
+}
+
+function parseKM(s: string): number {
+  const trimmed = s.trim().toUpperCase();
+  if (trimmed.endsWith("M")) return parseFloat(trimmed) * 1_000_000;
+  if (trimmed.endsWith("K")) return parseFloat(trimmed) * 1_000;
+  return parseInt(trimmed, 10) || 0;
+}
+
+// ─── Meta Ads Library API ─────────────────────────────────────────────────────
+
+export interface MetaAdRecord {
   id: string;
-  page_id: string;
+  page_id?: string;
+  page_name?: string;
   ad_creative_bodies?: string[];
   ad_creative_link_captions?: string[];
+  ad_creative_link_titles?: string[];
   ad_delivery_start_time?: string;
   ad_delivery_stop_time?: string;
   ad_snapshot_url?: string;
-  bylines?: string; // creator partnership indicator
-  currency?: string;
-  estimated_audience_size?: { lower_bound: number; upper_bound: number };
-  impressions?: { lower_bound: string; upper_bound: string };
-  spend?: { lower_bound: string; upper_bound: string };
+  media_type?: "IMAGE" | "VIDEO" | "MEME" | "NONE";
+  impressions?: string; // range string for non-political ads
+  spend?: { lower_bound?: string; upper_bound?: string };
+  publisher_platforms?: string[];
+}
+
+interface MetaAdsAPIConfig {
+  accessToken: string;
+  pageId?: string;
+  searchTerms?: string;
+  period: string; // "YYYY-MM"
+  countryCode?: string;
 }
 
 /**
- * Fetch ads from the Meta Ads Library API for a given page.
+ * Fetch ads from the Meta Ads Library API.
+ * Paginates through all results (up to 1000 ads).
  * Returns null if the API is unavailable (triggers mock fallback).
  */
-export async function fetchMetaAds(config: MetaAdsAPIConfig): Promise<AdDataSnapshot | null> {
+export async function fetchMetaAds(config: MetaAdsAPIConfig): Promise<{
+  snapshot: AdDataSnapshot;
+  rawAds: MetaAdRecord[];
+} | null> {
   const token = process.env.META_ACCESS_TOKEN ?? config.accessToken;
   if (!token) {
     console.log("[Meta API] No access token configured — using mock data");
@@ -46,53 +139,101 @@ export async function fetchMetaAds(config: MetaAdsAPIConfig): Promise<AdDataSnap
   try {
     const [year, month] = config.period.split("-").map(Number);
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-    const endDate = `${year}-${String(month).padStart(2, "0")}-${new Date(year, month, 0).getDate()}`;
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const endDate = `${year}-${String(month).padStart(2, "0")}-${daysInMonth}`;
 
+    const allAds: MetaAdRecord[] = [];
+    let nextUrl: string | null = null;
+
+    // Build initial request
     const params = new URLSearchParams({
       access_token: token,
-      search_type: "PAGE",
-      search_page_ids: config.pageId,
       ad_active_status: "ALL",
       ad_delivery_date_min: startDate,
       ad_delivery_date_max: endDate,
-      fields: "id,page_id,ad_creative_bodies,bylines,ad_delivery_start_time,ad_delivery_stop_time,impressions,spend",
-      limit: "500",
+      ad_reached_countries: `["${config.countryCode ?? "GB"}"]`,
+      ad_type: "ALL",
+      fields: [
+        "id",
+        "page_id",
+        "page_name",
+        "ad_creative_bodies",
+        "ad_creative_link_captions",
+        "ad_creative_link_titles",
+        "ad_delivery_start_time",
+        "ad_delivery_stop_time",
+        "media_type",
+        "impressions",
+        "spend",
+        "publisher_platforms",
+      ].join(","),
+      limit: "200",
     });
 
-    const response = await fetch(
-      `https://graph.facebook.com/v19.0/ads_archive?${params.toString()}`,
-      { signal: AbortSignal.timeout(15000) }
-    );
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({}));
-      const errorCode = errorBody?.error?.code;
-
-      // Error 2332002 = identity verification pending
-      if (errorCode === 2332002) {
-        console.log("[Meta API] Identity verification pending (error 2332002) — using mock data");
-        return null;
-      }
-
-      console.warn("[Meta API] API error:", errorBody?.error?.message ?? response.status);
+    // Search by page ID (preferred — exact match) or search terms (fallback)
+    if (config.pageId) {
+      params.set("search_page_ids", config.pageId);
+    } else if (config.searchTerms) {
+      params.set("search_terms", config.searchTerms);
+    } else {
+      console.warn("[Meta API] Neither pageId nor searchTerms provided");
       return null;
     }
 
-    const data = await response.json();
-    const ads: MetaAdRecord[] = data.data ?? [];
+    nextUrl = `${META_BASE_URL}/ads_archive?${params.toString()}`;
 
-    if (ads.length === 0) {
-      console.log("[Meta API] No ads returned for page", config.pageId);
-      return buildMetaSnapshot(ads);
+    // Paginate through results (max 5 pages = 1000 ads)
+    let pageCount = 0;
+    while (nextUrl && pageCount < 5) {
+      const pageResponse: Response = await fetch(nextUrl, { signal: AbortSignal.timeout(20000) });
+
+      if (!pageResponse.ok) {
+        const errorBody: { error?: { code?: number; message?: string } } = await pageResponse.json().catch(() => ({}));
+        const errorCode = errorBody?.error?.code;
+        const errorMsg = errorBody?.error?.message ?? `HTTP ${pageResponse.status}`;
+
+        // Known error codes
+        if (errorCode === 2332002) {
+          console.log("[Meta API] Identity verification pending (2332002) — using mock data");
+          return null;
+        }
+        if (errorCode === 613) {
+          console.warn("[Meta API] Rate limit hit (613) — using mock data");
+          return null;
+        }
+        if (errorCode === 190) {
+          console.warn("[Meta API] Invalid access token (190) — using mock data");
+          return null;
+        }
+
+        console.warn(`[Meta API] Error ${errorCode}: ${errorMsg}`);
+        return null;
+      }
+
+      const pageData: { data?: MetaAdRecord[]; paging?: { next?: string } } = await pageResponse.json();
+      const ads: MetaAdRecord[] = pageData.data ?? [];
+      allAds.push(...ads);
+
+      // Follow pagination cursor
+      nextUrl = pageData.paging?.next ?? null;
+      pageCount++;
+
+      // Stop if we got fewer than a full page (no more results)
+      if (ads.length < 200) break;
     }
 
-    return buildMetaSnapshot(ads);
+    console.log(`[Meta API] Fetched ${allAds.length} ads for period ${config.period}`);
+    return { snapshot: buildMetaSnapshot(allAds), rawAds: allAds };
   } catch (error) {
     console.warn("[Meta API] Request failed:", error);
     return null;
   }
 }
 
+/**
+ * Build an AdDataSnapshot from raw Meta ad records.
+ * Uses real partnership signal detection and media_type for format breakdown.
+ */
 function buildMetaSnapshot(ads: MetaAdRecord[]): AdDataSnapshot {
   let partnershipAds = 0;
   let spendMin = 0;
@@ -103,24 +244,53 @@ function buildMetaSnapshot(ads: MetaAdRecord[]): AdDataSnapshot {
   const durations: number[] = [];
 
   for (const ad of ads) {
-    // Partnership detection via bylines field
-    if (ad.bylines && ad.bylines.trim().length > 0) {
+    // ── Partnership detection ──────────────────────────────────────────────
+    // Check ad body text for partnership signals
+    const bodies = ad.ad_creative_bodies ?? [];
+    const captions = ad.ad_creative_link_captions ?? [];
+    const titles = ad.ad_creative_link_titles ?? [];
+    const allText = [...bodies, ...captions, ...titles];
+
+    if (isPartnershipAd(allText)) {
       partnershipAds++;
     }
 
-    // Spend aggregation
-    if (ad.spend) {
-      spendMin += parseInt(ad.spend.lower_bound ?? "0", 10);
-      spendMax += parseInt(ad.spend.upper_bound ?? "0", 10);
+    // ── Format detection ───────────────────────────────────────────────────
+    // Use media_type field when available (most reliable)
+    // Carousel: multiple creative bodies (>2) or link captions suggest multi-card
+    const bodyCount = bodies.length;
+    const captionCount = captions.length;
+
+    if (bodyCount > 2 || captionCount > 2) {
+      // Multiple bodies/captions = carousel or collection
+      if (bodyCount > 4 || captionCount > 4) {
+        formatBreakdown.collection++;
+      } else {
+        formatBreakdown.carousel++;
+      }
+    } else if (ad.media_type === "VIDEO") {
+      formatBreakdown.video++;
+    } else if (ad.media_type === "IMAGE" || ad.media_type === "MEME") {
+      formatBreakdown.image++;
+    } else {
+      // Default: video is dominant on Meta (~65% of non-political ads)
+      formatBreakdown.video++;
     }
 
-    // Impressions aggregation
+    // ── Spend ──────────────────────────────────────────────────────────────
+    const spend = parseSpendRange(ad.spend);
+    spendMin += spend.min;
+    spendMax += spend.max;
+
+    // ── Impressions ────────────────────────────────────────────────────────
+    // impressions field is a range string for non-political ads
     if (ad.impressions) {
-      impressionsMin += parseInt(ad.impressions.lower_bound ?? "0", 10);
-      impressionsMax += parseInt(ad.impressions.upper_bound ?? "0", 10);
+      const imp = parseImpressionRange(ad.impressions);
+      impressionsMin += imp.min;
+      impressionsMax += imp.max;
     }
 
-    // Duration calculation
+    // ── Duration ──────────────────────────────────────────────────────────
     if (ad.ad_delivery_start_time) {
       const start = new Date(ad.ad_delivery_start_time).getTime();
       const end = ad.ad_delivery_stop_time
@@ -128,19 +298,6 @@ function buildMetaSnapshot(ads: MetaAdRecord[]): AdDataSnapshot {
         : Date.now();
       const days = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
       durations.push(days);
-    }
-
-    // Format detection (heuristic based on creative bodies count)
-    const bodyCount = ad.ad_creative_bodies?.length ?? 1;
-    if (bodyCount > 3) {
-      formatBreakdown.carousel++;
-    } else {
-      // Default to video/image split — video is dominant on Meta
-      if (Math.random() > 0.35) {
-        formatBreakdown.video++;
-      } else {
-        formatBreakdown.image++;
-      }
     }
   }
 
@@ -159,6 +316,75 @@ function buildMetaSnapshot(ads: MetaAdRecord[]): AdDataSnapshot {
     impressionsMax,
     avgDurationDays,
   };
+}
+
+// ─── Meta Page Search ─────────────────────────────────────────────────────────
+
+export interface MetaPageResult {
+  id: string;
+  name: string;
+  category?: string;
+  fan_count?: number;
+  verification_status?: string;
+  picture?: { data?: { url?: string } };
+}
+
+/**
+ * Search for Meta Pages by name to resolve a brand to its Page ID.
+ * Uses the Graph API /pages/search endpoint.
+ */
+export async function searchMetaPages(
+  query: string,
+  limit = 5
+): Promise<MetaPageResult[]> {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) return [];
+
+  try {
+    const params = new URLSearchParams({
+      access_token: token,
+      q: query,
+      type: "page",
+      fields: "id,name,category,fan_count,verification_status,picture",
+      limit: String(limit),
+    });
+
+    const response = await fetch(
+      `${META_BASE_URL}/pages/search?${params.toString()}`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      console.warn("[Meta Page Search] Error:", err?.error?.message ?? response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    return (data.data ?? []) as MetaPageResult[];
+  } catch (error) {
+    console.warn("[Meta Page Search] Request failed:", error);
+    return [];
+  }
+}
+
+/**
+ * Resolve a brand name to its most likely Meta Page ID.
+ * Returns the best match (verified page or highest fan count).
+ */
+export async function resolveMetaPageId(brandName: string): Promise<string | null> {
+  const pages = await searchMetaPages(brandName, 5);
+  if (pages.length === 0) return null;
+
+  // Prefer verified pages, then sort by fan count
+  const sorted = pages.sort((a, b) => {
+    const aVerified = a.verification_status === "blue_verified" || a.verification_status === "gray_verified" ? 1 : 0;
+    const bVerified = b.verification_status === "blue_verified" || b.verification_status === "gray_verified" ? 1 : 0;
+    if (aVerified !== bVerified) return bVerified - aVerified;
+    return (b.fan_count ?? 0) - (a.fan_count ?? 0);
+  });
+
+  return sorted[0]?.id ?? null;
 }
 
 // ─── TikTok Commercial Content API ───────────────────────────────────────────
@@ -186,19 +412,16 @@ export async function fetchTikTokAds(config: TikTokAdsAPIConfig): Promise<AdData
 
   try {
     // Step 1: Get access token
-    const tokenResponse = await fetch(
-      "https://open.tiktokapis.com/v2/oauth/token/",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          client_key: clientKey,
-          client_secret: clientSecret,
-          grant_type: "client_credentials",
-        }).toString(),
-        signal: AbortSignal.timeout(10000),
-      }
-    );
+    const tokenResponse = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
+        grant_type: "client_credentials",
+      }).toString(),
+      signal: AbortSignal.timeout(10000),
+    });
 
     if (!tokenResponse.ok) {
       console.warn("[TikTok API] Token request failed:", tokenResponse.status);
@@ -207,7 +430,6 @@ export async function fetchTikTokAds(config: TikTokAdsAPIConfig): Promise<AdData
 
     const tokenData = await tokenResponse.json();
     const accessToken = tokenData.access_token;
-
     if (!accessToken) {
       console.warn("[TikTok API] No access token in response");
       return null;
@@ -250,10 +472,8 @@ export async function fetchTikTokAds(config: TikTokAdsAPIConfig): Promise<AdData
     }
 
     const queryData = await queryResponse.json();
-
-    // TikTok API returns internal_error for new accounts during activation
     if (queryData.error?.code === "internal_error") {
-      console.log("[TikTok API] Internal error (new account activation pending) — using mock data");
+      console.log("[TikTok API] Internal error (activation pending) — using mock data");
       return null;
     }
 
@@ -272,9 +492,7 @@ function buildTikTokSnapshot(ads: Record<string, unknown>[]): AdDataSnapshot {
 
   for (const ad of ads) {
     if (ad.is_branded_content) partnershipAds++;
-
-    // TikTok is almost entirely video
-    formatBreakdown.video++;
+    formatBreakdown.video++; // TikTok is almost entirely video
 
     if (ad.first_shown_date && ad.last_shown_date) {
       const start = new Date(ad.first_shown_date as string).getTime();
@@ -306,6 +524,8 @@ function buildTikTokSnapshot(ads: Record<string, unknown>[]): AdDataSnapshot {
 /**
  * Fetch ad data for a brand from both platforms.
  * Falls back to mock data if either API is unavailable.
+ * When META_ACCESS_TOKEN is set, attempts live Meta Ads Library first.
+ * If the brand has no stored pageId, attempts live page resolution.
  */
 export async function fetchBrandAdData(
   brandSlug: string,
@@ -317,28 +537,52 @@ export async function fetchBrandAdData(
   meta: AdDataSnapshot;
   tiktok: AdDataSnapshot;
   usedMockData: boolean;
+  resolvedMetaPageId?: string | null;
 }> {
   const mockData = getMockAdData(brandSlug);
   let usedMockData = false;
+  let resolvedMetaPageId: string | null | undefined = metaPageId;
 
-  // Attempt Meta API
+  // ── Meta Ads Library ───────────────────────────────────────────────────────
   let meta: AdDataSnapshot | null = null;
-  if (metaPageId) {
-    meta = await fetchMetaAds({
-      accessToken: process.env.META_ACCESS_TOKEN ?? "",
-      pageId: metaPageId,
+  const metaToken = process.env.META_ACCESS_TOKEN;
+
+  if (metaToken) {
+    // If we don't have a page ID, try to resolve it live
+    if (!resolvedMetaPageId) {
+      console.log(`[Meta API] No page ID for "${brandName}" — attempting live resolution`);
+      resolvedMetaPageId = await resolveMetaPageId(brandName);
+      if (resolvedMetaPageId) {
+        console.log(`[Meta API] Resolved "${brandName}" to page ID: ${resolvedMetaPageId}`);
+      }
+    }
+
+    const result = await fetchMetaAds({
+      accessToken: metaToken,
+      pageId: resolvedMetaPageId ?? undefined,
+      searchTerms: resolvedMetaPageId ? undefined : brandName,
       period,
+      countryCode: "GB",
     });
+
+    if (result) {
+      meta = result.snapshot;
+      console.log(
+        `[Meta API] Live data: ${meta.totalAds} ads, ${meta.partnershipAds} partnership ads`
+      );
+    }
   }
 
   if (!meta) {
     meta = mockData.meta;
     usedMockData = true;
+    console.log(`[Meta API] Using mock data for "${brandName}"`);
   }
 
-  // Attempt TikTok API
+  // ── TikTok Commercial Content API ─────────────────────────────────────────
   let tiktok: AdDataSnapshot | null = null;
   const tiktokSearchTerm = tiktokHandle?.replace("@", "") ?? brandName;
+
   if (process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET) {
     tiktok = await fetchTikTokAds({
       clientKey: process.env.TIKTOK_CLIENT_KEY,
@@ -351,8 +595,8 @@ export async function fetchBrandAdData(
 
   if (!tiktok) {
     tiktok = mockData.tiktok;
-    usedMockData = true;
+    if (!metaToken) usedMockData = true; // only flag mock if both are mock
   }
 
-  return { meta, tiktok, usedMockData };
+  return { meta, tiktok, usedMockData, resolvedMetaPageId };
 }

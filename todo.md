@@ -60,3 +60,12 @@
 - [x] Update PDF export to include account-level section when available
 - [x] Update Andromeda scoring tests
 - [x] Save checkpoint and deliver
+
+## Phase 8: Meta Ads Library API Integration
+- [x] Research Meta Ads Library API endpoints and data shape
+- [x] Build real Meta Ads Library connector with pagination, real partnership detection, real format detection
+- [x] Update brand resolution to search real Meta Page IDs via API (live page search + persist resolved IDs)
+- [x] Update audit.create to use live data when token is present, mock as fallback
+- [x] Add META_ACCESS_TOKEN secret (token valid, awaiting Meta identity verification for ads_library access)
+- [x] Token validation test passes — Ads Library query awaiting Meta app verification (error 2332002)
+- [x] Save checkpoint and deliver
