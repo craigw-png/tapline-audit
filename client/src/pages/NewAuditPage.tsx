@@ -17,6 +17,7 @@ export default function NewAuditPage() {
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [customInput, setCustomInput] = useState("");
   const [period] = useState("2026-05");
+  const [brandDomain, setBrandDomain] = useState("");
 
   const { data: suggestions } = trpc.competitor.suggest.useQuery(
     { brandName },
@@ -59,7 +60,13 @@ export default function NewAuditPage() {
       toast.error("Brand information is missing.");
       return;
     }
-    createAudit.mutate({ brandName, brandSlug, period, competitors });
+    createAudit.mutate({
+      brandName,
+      brandSlug,
+      period,
+      competitors,
+      brandDomain: brandDomain.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "") || undefined,
+    });
   };
 
   return (
@@ -195,6 +202,23 @@ export default function NewAuditPage() {
           {competitors.length >= 5 && (
             <p className="text-xs text-amber-400 mt-2">Maximum 5 competitors reached.</p>
           )}
+        </div>
+
+        {/* Optional domain for Halo Effect */}
+        <div className="glass rounded-2xl p-5 mb-6">
+          <h3 className="font-semibold mb-1">Website Domain <span className="text-xs font-normal text-muted-foreground ml-1">(optional)</span></h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Add the brand&apos;s website domain to unlock the <strong>Halo Effect</strong> tab — traffic intelligence showing whether creator and ad activity is actually landing on the brand&apos;s own site.
+          </p>
+          <Input
+            value={brandDomain}
+            onChange={(e) => setBrandDomain(e.target.value)}
+            placeholder="e.g. ninjahousehold.com"
+            className="h-9 text-sm bg-input/50"
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            You can also add this later from within the audit. Each traffic pull uses Manus Data API credits.
+          </p>
         </div>
 
         {/* CTA */}

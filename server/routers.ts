@@ -146,6 +146,7 @@ export const appRouter = router({
           brandSlug: z.string().min(1),
           period: z.string().default("2026-05"),
           competitors: z.array(z.string()).max(5).default([]),
+          brandDomain: z.string().optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -174,6 +175,7 @@ export const appRouter = router({
           platform: "combined",
           status: "processing",
           usedMockData: false,
+          brandDomain: input.brandDomain ?? null,
         });
 
         if (!audit) throw new Error("Failed to create audit record");
