@@ -10,9 +10,11 @@
 import { describe, it, expect } from "vitest";
 
 const META_TOKEN = process.env.META_ACCESS_TOKEN;
+// Skip if token is a placeholder (e.g. "test" injected by the test runner)
+const HAS_REAL_TOKEN = META_TOKEN && META_TOKEN.length > 20;
 
 describe("Meta Ads Library API — token validation", () => {
-  it.skipIf(!META_TOKEN)("token is valid and has ads_library scope", async () => {
+  it.skipIf(!HAS_REAL_TOKEN)("token is valid and has ads_library scope", async () => {
     // Use the /debug_token endpoint to inspect the token
     const params = new URLSearchParams({
       input_token: META_TOKEN!,
@@ -58,7 +60,7 @@ describe("Meta Ads Library API — token validation", () => {
     }
   });
 
-  it.skipIf(!META_TOKEN)("can query the Meta Ads Library for a known brand", async () => {
+  it.skipIf(!HAS_REAL_TOKEN)("can query the Meta Ads Library for a known brand", async () => {
     // Search for Ninja Kitchen UK ads — a brand we know has active ads
     const params = new URLSearchParams({
       access_token: META_TOKEN!,

@@ -117,6 +117,59 @@ export interface TikTokShopIntelligenceData {
   };
 }
 
+// ─── SimilarWeb Halo Effect Types ──────────────────────────────────────────
+
+export interface ChannelMix {
+  direct: number;
+  organicSearch: number;
+  paidSearch: number;
+  social: number;
+  referral: number;
+  display: number;
+  email: number;
+}
+
+export interface ChannelMixTrendPoint extends ChannelMix {
+  month: string;
+}
+
+export interface MonthlyVisitPoint {
+  month: string;
+  visits: number;
+}
+
+export interface CaptureGap {
+  detected: boolean;
+  severity: "high" | "medium" | "none";
+  socialTrafficPct: number;
+  captureRate: number;
+  diagnosis: string;
+  recommendation: string;
+}
+
+export interface CompetitorTrafficPoint {
+  brandName: string;
+  domain: string;
+  latestMonthlyVisits: number;
+  socialTrafficPct: number;
+}
+
+export interface SimilarWebData {
+  domain: string;
+  dataAsOf: string;
+  isMock: boolean;
+  confidenceTier: "high" | "medium" | "low";
+  confidenceNote: string;
+  latestMonthlyVisits: number;
+  globalRank: number | null;
+  bounceRate: number | null;
+  channelMix: ChannelMix | null;
+  channelMixTrend: ChannelMixTrendPoint[] | null;
+  monthlyVisitsTrend: MonthlyVisitPoint[] | null;
+  captureGap: CaptureGap | null;
+  competitorComparison: CompetitorTrafficPoint[] | null;
+}
+
 export interface Audit {
   id: number;
   shareId: string;
@@ -170,6 +223,10 @@ export interface Audit {
   cpaDeltaPct: number | null;
   /** Meta's own creative similarity score (risk threshold: 60%) */
   creativeSimilarityScore: number | null;
+
+  // ─── SimilarWeb Halo Effect ──────────────────────────────────────────────────
+  brandDomain: string | null;
+  similarwebData: SimilarWebData | null;
 
   createdAt: Date;
   updatedAt: Date;

@@ -34,6 +34,8 @@ export const brands = mysqlTable("brands", {
   tiktokHandle: varchar("tiktokHandle", { length: 128 }),
   industry: varchar("industry", { length: 128 }),
   logoUrl: text("logoUrl"),
+  /** Brand's primary website domain (e.g. "ninjahousehold.com") — used for SimilarWeb traffic analysis */
+  domain: varchar("domain", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -111,6 +113,12 @@ export const audits = mysqlTable("audits", {
 
   // TikTok Shop Intelligence data (Creative Center + Affiliate API)
   tiktokShopData: json("tiktokShopData").$type<TikTokShopIntelligence>(),
+
+  // SimilarWeb Halo Effect — website traffic layer
+  /** Brand website domain used for SimilarWeb analysis */
+  brandDomain: varchar("brandDomain", { length: 255 }),
+  /** SimilarWeb traffic data — channel mix, trend, capture gap */
+  similarwebData: json("similarwebData").$type<SimilarWebData>(),
 
   usedMockData: boolean("usedMockData").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -382,4 +390,96 @@ export interface TikTokShopCompetitor {
   estimatedMonthlyGmv?: string;
   openCollaboration: boolean;
   topCreatorCount?: number;
+}
+
+// ─── SimilarWeb Halo Effect Types ─────────────────────────────────────────────
+
+/**
+ * SimilarWeb traffic data for a brand's website.
+ * Sourced from the Manus built-in SimilarWeb Data API.
+ *
+ * IMPORTANT GUARDRAILS (shown in UI):
+ * - Data is modelled, not measured — directionally solid for high-traffic brands,
+ *   noisier for sites under ~50K monthly visits.
+ * - "Social" channel won't cleanly isolate TikTok creator traffic vs. paid social.
+ * - Use for shape and trend, not precise attribution.
+ * - Correlation with creator activity is observational — not causal.
+ */
+export interface SimilarWebData {
+  domain: string;
+  /** ISO date the data was fetched */
+  dataAsOf: string;
+  /** Whether this is mock/demo data */
+  isMock: boolean;
+  /** Confidence tier based on monthly traffic volume */
+  confidenceTier: "high" | "medium" | "low";
+  /** Explanation of confidence tier */
+  confidenceNote: string;
+
+  /** Monthly visit totals for the last 6 months */
+  monthlyVisitsTrend: Array<{
+    month: string; // "YYYY-MM"
+    visits: number;
+  }>;
+
+  /** Latest month's total visits */
+  latestMonthlyVisits: number;
+
+  /** Global rank (lower = better) */
+  globalRank?: number;
+
+  /** Bounce rate (%) */
+  bounceRate?: number;
+
+  /** Channel mix — averaged over the last 3 months */
+  channelMix: {
+    direct: number;       // % of traffic
+    organicSearch: number;
+    paidSearch: number;
+    social: number;
+    referral: number;
+    display: number;
+    email: number;
+  };
+
+  /**
+   * Channel mix trend — monthly breakdown for the last 6 months.
+   * Used to overlay with creator/ad activity timeline.
+   */
+  channelMixTrend: Array<{
+    month: string;
+    direct: number;
+    organicSearch: number;
+    paidSearch: number;
+    social: number;
+    referral: number;
+    display: number;
+    email: number;
+  }>;
+
+  /**
+   * Capture gap diagnostic.
+   * Flags when a brand has high creator/ad activity but low own-site social traffic,
+   * suggesting demand is landing on Amazon, Argos, or TikTok Shop instead.
+   */
+  captureGap: {
+    detected: boolean;
+    severity: "none" | "low" | "medium" | "high";
+    socialTrafficPct: number;
+    /** Estimated % of demand captured by own site vs. third-party retail */
+    captureRate: number;
+    /** Human-readable diagnostic */
+    diagnosis: string;
+    /** Recommended action */
+    recommendation: string;
+  };
+
+  /** Competitor traffic comparison (populated if competitor domains are known) */
+  competitorComparison?: Array<{
+    brandName: string;
+    domain: string;
+    latestMonthlyVisits: number;
+    socialTrafficPct: number;
+    organicSearchPct: number;
+  }>;
 }

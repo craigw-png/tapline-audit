@@ -78,3 +78,31 @@
 - [x] Mock data: kitchen appliances, beauty, fashion categories — UK market
 - [x] Write tests for the new connector (10 tests, all passing)
 - [x] Save checkpoint and deliver
+
+## Phase 10: SimilarWeb Halo Effect Layer
+- [ ] Research SimilarWeb Data API via Manus built-in Data API
+- [ ] Add domain input field to brand search / audit creation flow
+- [ ] Extend brands table with domain column
+- [ ] Extend audits table with similarwebData JSON column
+- [ ] Build SimilarWeb connector with mock fallback (Ninja Kitchen UK: ninjahousehold.com)
+- [ ] Mock data: 6-month traffic trend, channel mix (direct/organic/paid/social/referral/display), monthly visits, confidence tier
+- [ ] Build capture gap diagnostic (high creator activity + low own-site social traffic = demand leaking to Amazon/TikTok Shop)
+- [ ] Build Halo Effect UI tab: channel mix stacked area chart, trend overlay with ad activity markers, capture gap callout, confidence flag
+- [ ] Confidence flag: high (>500K visits/mo), medium (50K–500K), low (<50K) — shown on all SimilarWeb data
+- [ ] Guardrail copy: "SimilarWeb is modelled, not measured — use for direction and trend, not precise attribution"
+- [ ] Write tests for SimilarWeb connector
+- [ ] Save checkpoint and deliver
+
+## Phase 10: SimilarWeb Halo Effect (On-Demand)
+- [ ] Apply DB migration (domain column on brands, brandDomain + similarwebData on audits)
+- [ ] Build SimilarWeb connector using Manus Data API (visits, channel mix desktop+mobile, bounce rate, global rank)
+- [ ] Build capture gap diagnostic logic
+- [ ] Add domain input to audit creation flow (optional field)
+- [ ] Add on-demand tRPC procedure: audit.loadSimilarWeb — pulls live data, stores in similarwebData column
+- [ ] Build Halo Effect UI tab with "Load Traffic Data" button (not auto-pulled)
+- [ ] Channel mix stacked area chart (6-month trend)
+- [ ] Capture gap callout card with severity badge
+- [ ] Competitor traffic comparison table
+- [ ] Confidence tier badge + guardrail copy on all SimilarWeb data
+- [ ] Write tests for SimilarWeb connector
+- [ ] Save checkpoint and deliver

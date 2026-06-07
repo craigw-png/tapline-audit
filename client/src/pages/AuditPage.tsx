@@ -43,6 +43,7 @@ import {
 } from "recharts";
 import type { Audit, AuditCompetitor, CreatorGapData } from "@/types/audit";
 import TikTokShopIntelligenceSection from "@/components/TikTokShopIntelligence";
+import HaloEffect from "@/components/HaloEffect";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -644,6 +645,12 @@ export default function AuditPage() {
               </span>
             </TabsTrigger>
             <TabsTrigger value="competitors" className="text-xs">Competitors</TabsTrigger>
+            <TabsTrigger value="halo" className="text-xs">
+              <span className="flex items-center gap-1">
+                <span>🌐</span>
+                <span>Halo Effect</span>
+              </span>
+            </TabsTrigger>
             <TabsTrigger value="account" className="text-xs">
               Account Audit
               {!(audit as any).hasAccountData && (
@@ -1112,6 +1119,18 @@ export default function AuditPage() {
           </TabsContent>
 
           {/* Account Audit Tab */}
+          <TabsContent value="halo" className="space-y-6">
+            <HaloEffect
+              auditId={audit.id}
+              brandName={audit.brandName}
+              partnershipPct={audit.partnershipPct ?? 0}
+              andromedaScore={audit.andromedaScore ?? 0}
+              initialData={audit.similarwebData}
+              initialDomain={audit.brandDomain}
+              competitorNames={competitors.map((c) => c.brandName)}
+            />
+          </TabsContent>
+
           <TabsContent value="account" className="space-y-6">
             <AccountLevelPanel audit={audit} brandSlug={brandSlug} />
           </TabsContent>

@@ -30,6 +30,7 @@ import {
 import { fetchBrandAdData, searchMetaPages, resolveMetaPageId } from "./apiConnectors";
 import { fetchAccountLevelData } from "./accountConnectors";
 import { fetchTikTokShopIntelligence } from "./tiktokShopConnector";
+import { fetchSimilarWebData, getMockSimilarWebData } from "./similarwebConnector";
 import { notifyOwner } from "./_core/notification";
 
 export const appRouter = router({
@@ -431,6 +432,92 @@ export const appRouter = router({
      * Admin: list all access requests.
      */
     list: protectedProcedure.query(async () => listAccountAccess()),
+  }),
+
+  // ─── SimilarWeb Halo Effect (On-Demand) ───────────────────────────────────
+  halo: router({
+    /**
+     * On-demand: pull SimilarWeb traffic data for an audit.
+     * Only called when the user explicitly clicks "Load Traffic Data".
+     * Stores the result in the audit's similarwebData column.
+     */
+    load: publicProcedure
+      .input(
+        z.object({
+          auditId: z.number(),
+          domain: z.string().min(3),
+          competitorDomains: z
+            .array(z.object({ brandName: z.string(), domain: z.string() }))
+            .max(3)
+            .default([]),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const audit = await getAuditById(input.auditId);
+        if (!audit) throw new Error("Audit not found");
+
+        const partnershipPct = audit.partnershipPct ?? 0;
+        const andromedaScore = audit.andromedaScore ?? 0;
+
+        const data = await fetchSimilarWebData({
+          domain: input.domain,
+          partnershipPct,
+          andromedaScore,
+          competitorDomains: input.competitorDomains,
+        });
+
+        // Persist to the audit record
+        await updateAudit(input.auditId, {
+          brandDomain: input.domain,
+          similarwebData: data,
+        });
+
+        // Also persist domain to the brand record
+        if (audit.brandId) {
+          const brand = await getBrandBySlug(
+            audit.brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+          );
+          if (brand) {
+            await upsertBrand({
+              name: brand.name,
+              slug: brand.slug ?? "",
+              domain: input.domain,
+            });
+          }
+        }
+
+        return { success: true, data };
+      }),
+
+    /**
+     * Get cached SimilarWeb data for an audit (no API call).
+     */
+    getCached: publicProcedure
+      .input(z.object({ auditId: z.number() }))
+      .query(async ({ input }) => {
+        const audit = await getAuditById(input.auditId);
+        if (!audit) return null;
+        return {
+          domain: audit.brandDomain,
+          data: audit.similarwebData,
+        };
+      }),
+
+    /**
+     * Preview mock data for a domain (no API call, no credits).
+     * Used to show the UI shape before the user loads real data.
+     */
+    preview: publicProcedure
+      .input(
+        z.object({
+          domain: z.string().min(3),
+          partnershipPct: z.number().default(0),
+          andromedaScore: z.number().default(0),
+        })
+      )
+      .query(({ input }) =>
+        getMockSimilarWebData(input.domain, input.partnershipPct, input.andromedaScore)
+      ),
   }),
 });
 
