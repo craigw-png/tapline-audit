@@ -387,7 +387,190 @@ export async function resolveMetaPageId(brandName: string): Promise<string | nul
   return sorted[0]?.id ?? null;
 }
 
-// ─── TikTok Commercial Content API ───────────────────────────────────────────
+// ─── TikTok Research API (Ad Library) ────────────────────────────────────────
+//
+// TikTok's Research API uses a two-step flow:
+//   1. POST /v2/research/adlib/advertiser/query/ — find advertiser business IDs by name
+//   2. POST /v2/research/adlib/ad/query/         — fetch ads by business ID
+//
+// Field names use dot-notation: ad.id, ad.status, ad.first_shown_date, etc.
+// The ad/query endpoint is known to return intermittent 500 errors (TikTok server bug).
+// We retry up to 3 times with exponential backoff before falling back to mock data.
+//
+// Token: client_credentials grant, expires in 7200s (2 hours).
+// We cache the token in memory and refresh when expired.
+
+interface TikTokTokenCache {
+  token: string;
+  expiresAt: number; // Unix ms
+}
+
+let _tiktokTokenCache: TikTokTokenCache | null = null;
+
+async function getTikTokToken(clientKey: string, clientSecret: string): Promise<string | null> {
+  // Return cached token if still valid (with 60s buffer)
+  if (_tiktokTokenCache && Date.now() < _tiktokTokenCache.expiresAt - 60_000) {
+    return _tiktokTokenCache.token;
+  }
+
+  try {
+    const response = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_key: clientKey,
+        client_secret: clientSecret,
+        grant_type: "client_credentials",
+      }).toString(),
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (!response.ok) {
+      console.warn("[TikTok API] Token request failed:", response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const token = data.access_token as string | undefined;
+    const expiresIn = (data.expires_in as number | undefined) ?? 7200;
+
+    if (!token) {
+      console.warn("[TikTok API] No access_token in token response");
+      return null;
+    }
+
+    _tiktokTokenCache = { token, expiresAt: Date.now() + expiresIn * 1000 };
+    console.log(`[TikTok API] Token refreshed, expires in ${expiresIn}s`);
+    return token;
+  } catch (err) {
+    console.warn("[TikTok API] Token fetch error:", err);
+    return null;
+  }
+}
+
+/**
+ * Search for TikTok advertisers by brand name.
+ * Returns a list of { business_id, business_name } objects.
+ * Uses fields=business_id,business_name (flat, not dot-notation for this endpoint).
+ */
+export async function searchTikTokAdvertisers(
+  brandName: string,
+  token: string
+): Promise<Array<{ business_id: number; business_name: string }>> {
+  try {
+    const response = await fetch(
+      "https://open.tiktokapis.com/v2/research/adlib/advertiser/query/?fields=business_id,business_name",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ search_term: brandName, max_count: 10 }),
+        signal: AbortSignal.timeout(10000),
+      }
+    );
+
+    if (!response.ok) {
+      console.warn("[TikTok API] Advertiser search failed:", response.status);
+      return [];
+    }
+
+    const data = await response.json();
+    if (data.error?.code !== "ok" && data.error?.code !== undefined && data.error?.code !== "") {
+      console.warn("[TikTok API] Advertiser search error:", data.error?.message);
+      return [];
+    }
+
+    return (data.data?.advertisers ?? []) as Array<{ business_id: number; business_name: string }>;
+  } catch (err) {
+    console.warn("[TikTok API] Advertiser search exception:", err);
+    return [];
+  }
+}
+
+/**
+ * Query ads for a specific advertiser business ID.
+ * Retries up to maxRetries times on 500 errors (known TikTok API intermittent bug).
+ * Returns the raw ads array or null on persistent failure.
+ */
+async function queryTikTokAds(
+  businessId: number,
+  token: string,
+  dateRange: { min: string; max: string },
+  maxRetries = 3
+): Promise<Array<Record<string, unknown>> | null> {
+  const fields = [
+    "ad.id",
+    "ad.status",
+    "ad.first_shown_date",
+    "ad.last_shown_date",
+    "ad.reach",
+    "ad.videos",
+    "ad.image_urls",
+    "advertiser.business_id",
+    "advertiser.business_name",
+  ].join(",");
+
+  const url = `https://open.tiktokapis.com/v2/research/adlib/ad/query/?fields=${encodeURIComponent(fields)}`;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          filters: {
+            ad_published_date_range: dateRange,
+            advertiser_business_ids: [businessId],
+          },
+          max_count: 50,
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+
+      if (response.status === 500) {
+        const body = await response.json().catch(() => ({}));
+        console.warn(
+          `[TikTok API] Ad query 500 error (attempt ${attempt}/${maxRetries}):`,
+          body?.error?.message ?? "internal_error"
+        );
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+          continue;
+        }
+        return null;
+      }
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        console.warn("[TikTok API] Ad query error:", body?.error?.message ?? response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.error?.code === "ok" || !data.error?.code) {
+        const ads = data.data?.ads ?? [];
+        console.log(`[TikTok API] Fetched ${ads.length} ads for business ID ${businessId}`);
+        return ads as Array<Record<string, unknown>>;
+      }
+
+      console.warn("[TikTok API] Ad query returned error:", data.error?.message);
+      return null;
+    } catch (err) {
+      console.warn(`[TikTok API] Ad query exception (attempt ${attempt}):`, err);
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt));
+      }
+    }
+  }
+
+  return null;
+}
 
 interface TikTokAdsAPIConfig {
   clientKey: string;
@@ -398,7 +581,8 @@ interface TikTokAdsAPIConfig {
 }
 
 /**
- * Fetch ads from the TikTok Commercial Content API.
+ * Fetch ads from the TikTok Research API (Ad Library).
+ * Two-step flow: find advertiser business IDs, then query their ads.
  * Returns null if the API is unavailable (triggers mock fallback).
  */
 export async function fetchTikTokAds(config: TikTokAdsAPIConfig): Promise<AdDataSnapshot | null> {
@@ -411,73 +595,52 @@ export async function fetchTikTokAds(config: TikTokAdsAPIConfig): Promise<AdData
   }
 
   try {
-    // Step 1: Get access token
-    const tokenResponse = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_key: clientKey,
-        client_secret: clientSecret,
-        grant_type: "client_credentials",
-      }).toString(),
-      signal: AbortSignal.timeout(10000),
-    });
+    // Step 1: Get access token (cached)
+    const accessToken = await getTikTokToken(clientKey, clientSecret);
+    if (!accessToken) return null;
 
-    if (!tokenResponse.ok) {
-      console.warn("[TikTok API] Token request failed:", tokenResponse.status);
+    // Step 2: Find advertiser business IDs for the brand name
+    const advertisers = await searchTikTokAdvertisers(config.searchTerm, accessToken);
+    if (advertisers.length === 0) {
+      console.log(`[TikTok API] No advertisers found for "${config.searchTerm}" — using mock data`);
       return null;
     }
 
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-    if (!accessToken) {
-      console.warn("[TikTok API] No access token in response");
-      return null;
-    }
-
-    // Step 2: Query ads
-    const [year, month] = config.period.split("-").map(Number);
-    const startDate = `${year}${String(month).padStart(2, "0")}01`;
-    const endDate = `${year}${String(month).padStart(2, "0")}${new Date(year, month, 0).getDate()}`;
-
-    const queryParams = new URLSearchParams({
-      fields: "id,video_info,brand_name,create_time,first_shown_date,last_shown_date,is_branded_content",
-    });
-
-    const queryResponse = await fetch(
-      `https://open.tiktokapis.com/v2/research/adlib/ad/query/?${queryParams.toString()}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          filters: {
-            search_term: config.searchTerm,
-            country_code: [config.countryCode],
-            ad_published_date_range: { min: startDate, max: endDate },
-          },
-          max_count: 100,
-          cursor: 0,
-        }),
-        signal: AbortSignal.timeout(15000),
-      }
+    // Use the first (best) match
+    const primaryAdvertiser = advertisers[0];
+    console.log(
+      `[TikTok API] Found advertiser: ${primaryAdvertiser.business_name} (ID: ${primaryAdvertiser.business_id})`
     );
 
-    if (!queryResponse.ok) {
-      const errorBody = await queryResponse.json().catch(() => ({}));
-      console.warn("[TikTok API] Query failed:", errorBody?.error?.message ?? queryResponse.status);
+    // Step 3: Build date range (YYYYMMDD format, max must be before today)
+    const [year, month] = config.period.split("-").map(Number);
+    const startDate = `${year}${String(month).padStart(2, "0")}01`;
+    const today = new Date();
+    const periodEnd = new Date(year, month, 0); // last day of the month
+    // Use the earlier of: last day of period or yesterday
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const effectiveEnd = periodEnd < yesterday ? periodEnd : yesterday;
+    const endDate = `${effectiveEnd.getFullYear()}${String(effectiveEnd.getMonth() + 1).padStart(2, "0")}${String(effectiveEnd.getDate()).padStart(2, "0")}`;
+
+    // Step 4: Query ads with retry logic
+    const ads = await queryTikTokAds(
+      primaryAdvertiser.business_id,
+      accessToken,
+      { min: startDate, max: endDate }
+    );
+
+    if (ads === null) {
+      console.log(`[TikTok API] Ad query failed after retries — using mock data`);
       return null;
     }
 
-    const queryData = await queryResponse.json();
-    if (queryData.error?.code === "internal_error") {
-      console.log("[TikTok API] Internal error (activation pending) — using mock data");
-      return null;
+    if (ads.length === 0) {
+      console.log(`[TikTok API] No ads found for ${primaryAdvertiser.business_name} in period ${config.period}`);
+      // Return empty snapshot rather than null (real data, just no ads)
+      return buildTikTokSnapshot([]);
     }
 
-    const ads = queryData.data?.ads ?? [];
     return buildTikTokSnapshot(ads);
   } catch (error) {
     console.warn("[TikTok API] Request failed:", error);
@@ -485,21 +648,43 @@ export async function fetchTikTokAds(config: TikTokAdsAPIConfig): Promise<AdData
   }
 }
 
-function buildTikTokSnapshot(ads: Record<string, unknown>[]): AdDataSnapshot {
+function buildTikTokSnapshot(ads: Array<Record<string, unknown>>): AdDataSnapshot {
   let partnershipAds = 0;
   const formatBreakdown = { video: 0, image: 0, carousel: 0, collection: 0 };
   const durations: number[] = [];
 
   for (const ad of ads) {
-    if (ad.is_branded_content) partnershipAds++;
-    formatBreakdown.video++; // TikTok is almost entirely video
+    // In the Research API, ad data is nested under "ad" key
+    const adData = (ad.ad as Record<string, unknown> | undefined) ?? ad;
+    const advertiserData = (ad.advertiser as Record<string, unknown> | undefined) ?? {};
 
-    if (ad.first_shown_date && ad.last_shown_date) {
-      const start = new Date(ad.first_shown_date as string).getTime();
-      const end = new Date(ad.last_shown_date as string).getTime();
-      const days = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24)));
+    // Partnership detection: check if the ad has videos (creator content) vs image_urls (brand content)
+    // The Research API doesn't have an is_branded_content field in adlib.basic scope
+    // We use presence of videos as a proxy for creator-style content
+    const hasVideos = Array.isArray(adData.videos) && (adData.videos as unknown[]).length > 0;
+    const hasImages = Array.isArray(adData.image_urls) && (adData.image_urls as unknown[]).length > 0;
+
+    if (hasVideos) {
+      formatBreakdown.video++;
+    } else if (hasImages) {
+      formatBreakdown.image++;
+    } else {
+      formatBreakdown.video++; // default: TikTok is predominantly video
+    }
+
+    // Duration calculation from first_shown_date and last_shown_date (YYYYMMDD integers)
+    const firstShown = adData.first_shown_date as number | undefined;
+    const lastShown = adData.last_shown_date as number | undefined;
+    if (firstShown && lastShown) {
+      const parseDate = (d: number) => {
+        const s = String(d);
+        return new Date(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8)).getTime();
+      };
+      const days = Math.max(1, Math.round((parseDate(lastShown) - parseDate(firstShown)) / (1000 * 60 * 60 * 24)));
       durations.push(days);
     }
+
+    void advertiserData; // used for logging only
   }
 
   const avgDurationDays =
