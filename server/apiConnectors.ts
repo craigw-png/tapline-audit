@@ -722,6 +722,8 @@ export async function fetchBrandAdData(
   meta: AdDataSnapshot;
   tiktok: AdDataSnapshot;
   usedMockData: boolean;
+  metaIsMock: boolean;
+  tiktokIsMock: boolean;
   resolvedMetaPageId?: string | null;
 }> {
   const mockData = getMockAdData(brandSlug);
@@ -783,5 +785,7 @@ export async function fetchBrandAdData(
     if (!metaToken) usedMockData = true; // only flag mock if both are mock
   }
 
-  return { meta, tiktok, usedMockData, resolvedMetaPageId };
+  const metaIsMock = meta === mockData.meta;
+  const tiktokIsMock = tiktok === mockData.tiktok;
+  return { meta, tiktok, usedMockData, metaIsMock, tiktokIsMock, resolvedMetaPageId };
 }

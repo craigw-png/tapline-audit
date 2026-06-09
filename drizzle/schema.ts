@@ -121,6 +121,10 @@ export const audits = mysqlTable("audits", {
   similarwebData: json("similarwebData").$type<SimilarWebData>(),
 
   usedMockData: boolean("usedMockData").default(false),
+  /** Whether Meta Ads Library data is mock (true) or live from the API (false) */
+  metaIsMock: boolean("metaIsMock").default(true),
+  /** Whether TikTok Ad Library data is mock (true) or live from the API (false) */
+  tiktokIsMock: boolean("tiktokIsMock").default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -191,6 +191,8 @@ export const appRouter = router({
         );
         const { meta, tiktok } = adData;
         const usedMockData = adData.usedMockData;
+        const metaIsMock = adData.metaIsMock;
+        const tiktokIsMock = adData.tiktokIsMock;
 
         // Persist resolved Meta page ID if it was discovered during this audit
         if (adData.resolvedMetaPageId && !brandRecord?.metaPageId && brandId) {
@@ -271,6 +273,8 @@ export const appRouter = router({
           creatorGapData: creatorGap,
           tiktokShopData,
           usedMockData,
+          metaIsMock,
+          tiktokIsMock,
           hasAccountData,
           ...(accountLevelData
             ? {

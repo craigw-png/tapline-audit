@@ -106,3 +106,4 @@
 - [x] Confidence tier badge + guardrail copy on all SimilarWeb data
 - [x] Write tests for SimilarWeb connector (10 tests, all passing)
 - [x] Save checkpoint and deliver
+- [x] Add Live/Mock data source status badges to audit results page (TikTok, Meta, TikTok Shop sections)

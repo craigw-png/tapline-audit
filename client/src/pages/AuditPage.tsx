@@ -501,9 +501,31 @@ export default function AuditPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {audit.usedMockData && (
-              <Badge variant="secondary" className="text-[10px]">Demo Data</Badge>
-            )}
+            {/* Per-platform data source status badges */}
+            <div className="hidden sm:flex items-center gap-1.5">
+              {(audit as any).metaIsMock !== false ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  Meta Demo
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Meta Live
+                </span>
+              )}
+              {(audit as any).tiktokIsMock !== false ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  TikTok Demo
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  TikTok Live
+                </span>
+              )}
+            </div>
             <Button variant="outline" size="sm" onClick={handleCopyShare} className="gap-1.5">
               {copied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
               {copied ? "Copied!" : "Share"}
@@ -720,13 +742,24 @@ export default function AuditPage() {
                 </h3>
                 <div className="space-y-4">
                   {[
-                    { label: "Meta", data: audit.metaAdsData, color: "bg-blue-500", icon: "📘" },
-                    { label: "TikTok", data: audit.tiktokAdsData, color: "bg-pink-500", icon: "🎵" },
-                  ].map(({ label, data, color, icon }) => (
+                    { label: "Meta", data: audit.metaAdsData, color: "bg-blue-500", icon: "📘", isMock: (audit as any).metaIsMock !== false },
+                    { label: "TikTok", data: audit.tiktokAdsData, color: "bg-pink-500", icon: "🎵", isMock: (audit as any).tiktokIsMock !== false },
+                  ].map(({ label, data, color, icon, isMock }) => (
                     <div key={label} className="bg-muted/30 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
                         <span className="font-medium text-sm flex items-center gap-2">
                           <span>{icon}</span> {label}
+                          {isMock ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                              Demo
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                              Live
+                            </span>
+                          )}
                         </span>
                         <span className="text-xs text-muted-foreground">{data?.totalAds ?? 0} ads</span>
                       </div>
@@ -1106,6 +1139,21 @@ export default function AuditPage() {
 
           {/* TikTok Shop Intelligence Tab */}
           <TabsContent value="tiktokshop" className="space-y-6">
+            {audit.tiktokShopData?.isMock !== undefined && (
+              <div className="flex items-center gap-2">
+                {audit.tiktokShopData.isMock ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    TikTok Shop — Demo data
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    TikTok Shop — Live data
+                  </span>
+                )}
+              </div>
+            )}
             {audit.tiktokShopData ? (
               <TikTokShopIntelligenceSection
                 data={audit.tiktokShopData}
