@@ -40,6 +40,9 @@ const BRAND_CATEGORY_MAP: Record<string, string> = {
   "boohoo": "fashion",
   "prettylittlething": "fashion",
   "zara": "fashion",
+  "dreame": "smart home",
+  "roborock": "smart home",
+  "eufy": "smart home",
   "oatly": "food & drink",
   "innocent drinks": "food & drink",
   "graze": "food & drink",
@@ -52,6 +55,7 @@ const TIKTOK_CATEGORY_IDS: Record<string, string> = {
   "food & drink": "600004",
   "fitness": "600005",
   "home & garden": "600007",
+  "smart home": "600008",
 };
 
 function detectCategory(brandName: string): string {
@@ -476,28 +480,31 @@ function getMockShopIntelligence(
 
   const brandNameLower = brandName.toLowerCase();
   const isNinja = brandNameLower.includes("ninja");
+  const isDreame = brandNameLower.includes("dreame");
+  // Dreame NL: TikTok Shop NL launches June 15 2026 — Dreame has no shop yet.
+  // Roborock and Eufy already sell via TikTok Shop DE cross-border into NL.
 
   return {
     dataAsOf: new Date().toISOString().split("T")[0],
     isMock: true,
     category,
-    country: "GB",
+    country: isDreame ? "NL" : "GB",
     topCreatorsByGmv: topCreators,
     trendingProducts,
     topShopVideos,
     brandShopPresence: {
-      hasShop: isNinja,
+      hasShop: isNinja ? true : false,
       totalProducts: isNinja ? 38 : undefined,
       activeAffiliates: isNinja ? 312 : undefined,
       estimatedMonthlyGmv: isNinja ? "£94,000" : undefined,
-      openCollaboration: isNinja,
+      openCollaboration: isNinja ? true : false,
     },
     competitorShopData,
     categoryBenchmarks: {
-      avgCreatorGmv: isKitchen ? "£18,400/mo" : isBeauty ? "£24,600/mo" : "£12,200/mo",
-      avgConversionRate: isKitchen ? 4.2 : isBeauty ? 5.8 : 3.1,
-      avgCommissionRate: isKitchen ? 8 : isBeauty ? 12 : 9,
-      topCreatorFollowerRange: "100K–500K",
+      avgCreatorGmv: isKitchen ? "£18,400/mo" : isBeauty ? "£24,600/mo" : isDreame ? "€14,800/mo" : "£12,200/mo",
+      avgConversionRate: isKitchen ? 4.2 : isBeauty ? 5.8 : isDreame ? 3.8 : 3.1,
+      avgCommissionRate: isKitchen ? 8 : isBeauty ? 12 : isDreame ? 9 : 9,
+      topCreatorFollowerRange: isDreame ? "50K–300K" : "100K–500K",
       dominantContentType: "video",
     },
   };

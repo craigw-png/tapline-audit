@@ -2,8 +2,8 @@
  * Mock Data Engine — Tapline
  *
  * Simulates real API responses for demonstration and development.
- * Primary mock: Ninja Kitchen UK, May 2026 (~52 ads, ~8% partnership ads)
- * Competitor mocks: KitchenAid UK, Vitamix UK, Sage Appliances UK
+ * Primary mocks: Ninja Kitchen UK, Dreame Nederland
+ * Competitor mocks: KitchenAid UK, Vitamix UK, Sage Appliances UK, Roborock NL, Dyson NL, Eufy NL
  */
 
 import type { AdDataSnapshot, CreatorGapData } from "../drizzle/schema";
@@ -110,6 +110,111 @@ export const NINJA_CREATOR_GAP_MOCK: CreatorGapData = {
   opportunityScore: 82,
 };
 
+// ─── Dreame Nederland (Primary Mock — NL smart home appliances) ───────────────
+// Research basis: Meta Ad Library NL shows ~28 active Dreame ads (product-focused,
+// minimal creator partnerships). TikTok @dreame_nl has only 158 followers and 6 posts
+// — essentially no TikTok presence. Competitors: Roborock, Dyson, Eufy dominate NL.
+// TikTok Shop NL launches June 15 2026 — major opportunity for Dreame.
+
+export const DREAME_META_MOCK: AdDataSnapshot = {
+  totalAds: 28,
+  partnershipAds: 2,
+  formatBreakdown: { video: 18, image: 7, carousel: 3, collection: 0 },
+  spendMin: 32000,
+  spendMax: 140000,
+  impressionsMin: 1800000,
+  impressionsMax: 7200000,
+  avgDurationDays: 21,
+  topAdIds: ["meta_dreame_001", "meta_dreame_002", "meta_dreame_003"],
+};
+
+export const DREAME_TIKTOK_MOCK: AdDataSnapshot = {
+  totalAds: 6,
+  partnershipAds: 0,
+  formatBreakdown: { video: 6, image: 0, carousel: 0, collection: 0 },
+  spendMin: 4000,
+  spendMax: 18000,
+  impressionsMin: 280000,
+  impressionsMax: 950000,
+  avgDurationDays: 9,
+  topAdIds: ["tiktok_dreame_001"],
+};
+
+export const DREAME_CREATOR_GAP_MOCK: CreatorGapData = {
+  organicCreators: [
+    {
+      handle: "@schoonmaakmetlisa",
+      platform: "tiktok",
+      followers: 312000,
+      avgEngagement: 5.4,
+      brandMentions: 9,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@dutchhomevlog",
+      platform: "tiktok",
+      followers: 187000,
+      avgEngagement: 6.1,
+      brandMentions: 6,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@techthuis_nl",
+      platform: "tiktok",
+      followers: 94000,
+      avgEngagement: 7.8,
+      brandMentions: 5,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@huis_en_tuin_nl",
+      platform: "meta",
+      followers: 143000,
+      avgEngagement: 3.9,
+      brandMentions: 4,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@robotstofzuigertest",
+      platform: "tiktok",
+      followers: 68000,
+      avgEngagement: 8.2,
+      brandMentions: 7,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@slimwonen_nl",
+      platform: "tiktok",
+      followers: 229000,
+      avgEngagement: 4.7,
+      brandMentions: 3,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@cleaningtips_nederland",
+      platform: "meta",
+      followers: 76000,
+      avgEngagement: 5.2,
+      brandMentions: 5,
+      inPaidPartnership: false,
+    },
+    {
+      handle: "@gadgetguru_nl",
+      platform: "tiktok",
+      followers: 158000,
+      avgEngagement: 6.9,
+      brandMentions: 4,
+      inPaidPartnership: true,
+    },
+  ],
+  paidCreators: [
+    { handle: "@gadgetguru_nl", platform: "tiktok", adCount: 1 },
+    { handle: "@dreame_nl_official", platform: "meta", adCount: 1 },
+  ],
+  gapCount: 7,
+  opportunityScore: 88,
+};
+
 // ─── Competitor Mocks ─────────────────────────────────────────────────────────
 
 export interface CompetitorMock {
@@ -174,6 +279,47 @@ export const COMPETITOR_MOCKS: Record<string, CompetitorMock> = {
     formatBreakdown: { video: 20, image: 7, carousel: 5, collection: 1 },
     avgDurationDays: 9,
   },
+  // NL smart home / robot vacuum competitors
+  roborock: {
+    name: "Roborock NL",
+    totalAds: 41,
+    partnershipPct: 12,
+    andromedaScore: 58,
+    estimatedSpendMin: 38000,
+    estimatedSpendMax: 155000,
+    formatBreakdown: { video: 26, image: 10, carousel: 4, collection: 1 },
+    avgDurationDays: 17,
+  },
+  dyson: {
+    name: "Dyson NL",
+    totalAds: 72,
+    partnershipPct: 29,
+    andromedaScore: 74,
+    estimatedSpendMin: 120000,
+    estimatedSpendMax: 480000,
+    formatBreakdown: { video: 38, image: 22, carousel: 10, collection: 2 },
+    avgDurationDays: 13,
+  },
+  eufy: {
+    name: "Eufy NL",
+    totalAds: 35,
+    partnershipPct: 34,
+    andromedaScore: 69,
+    estimatedSpendMin: 28000,
+    estimatedSpendMax: 110000,
+    formatBreakdown: { video: 22, image: 9, carousel: 4, collection: 0 },
+    avgDurationDays: 14,
+  },
+  sharkninja: {
+    name: "SharkNinja NL",
+    totalAds: 48,
+    partnershipPct: 21,
+    andromedaScore: 63,
+    estimatedSpendMin: 55000,
+    estimatedSpendMax: 210000,
+    formatBreakdown: { video: 30, image: 12, carousel: 5, collection: 1 },
+    avgDurationDays: 15,
+  },
 };
 
 // ─── Brand Resolution Mocks ───────────────────────────────────────────────────
@@ -220,6 +366,30 @@ export const BRAND_RESOLUTION_MOCKS: Record<string, BrandResolutionMock> = {
     industry: "Kitchen Appliances",
     competitorSlugs: ["ninja-kitchen-uk", "kitchenaid", "delonghi"],
   },
+  "dreame": {
+    name: "Dreame Nederland",
+    slug: "dreame-nederland",
+    metaPageId: "dreame_nederland",
+    tiktokHandle: "@dreame_nl",
+    industry: "Smart Home Appliances",
+    competitorSlugs: ["roborock", "dyson", "eufy"],
+  },
+  "dreame nederland": {
+    name: "Dreame Nederland",
+    slug: "dreame-nederland",
+    metaPageId: "dreame_nederland",
+    tiktokHandle: "@dreame_nl",
+    industry: "Smart Home Appliances",
+    competitorSlugs: ["roborock", "dyson", "eufy"],
+  },
+  "dreame nl": {
+    name: "Dreame Nederland",
+    slug: "dreame-nederland",
+    metaPageId: "dreame_nederland",
+    tiktokHandle: "@dreame_nl",
+    industry: "Smart Home Appliances",
+    competitorSlugs: ["roborock", "dyson", "eufy"],
+  },
 };
 
 /**
@@ -245,7 +415,7 @@ export function resolveBrandMock(query: string): BrandResolutionMock | null {
 }
 
 /**
- * Get mock ad data for a brand. Falls back to generic mock if not Ninja.
+ * Get mock ad data for a brand. Falls back to generic mock if not a known brand.
  */
 export function getMockAdData(brandSlug: string): {
   meta: AdDataSnapshot;
@@ -257,6 +427,14 @@ export function getMockAdData(brandSlug: string): {
       meta: NINJA_META_MOCK,
       tiktok: NINJA_TIKTOK_MOCK,
       creatorGap: NINJA_CREATOR_GAP_MOCK,
+    };
+  }
+
+  if (brandSlug.includes("dreame")) {
+    return {
+      meta: DREAME_META_MOCK,
+      tiktok: DREAME_TIKTOK_MOCK,
+      creatorGap: DREAME_CREATOR_GAP_MOCK,
     };
   }
 
