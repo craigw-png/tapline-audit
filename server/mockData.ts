@@ -369,7 +369,7 @@ export const BRAND_RESOLUTION_MOCKS: Record<string, BrandResolutionMock> = {
   "dreame": {
     name: "Dreame Nederland",
     slug: "dreame-nederland",
-    metaPageId: "dreame_nederland",
+    metaPageId: "106869335564373", // Real Facebook Page ID — verified via Meta Ads Library API
     tiktokHandle: "@dreame_nl",
     industry: "Smart Home Appliances",
     competitorSlugs: ["roborock", "dyson", "eufy"],
@@ -377,7 +377,7 @@ export const BRAND_RESOLUTION_MOCKS: Record<string, BrandResolutionMock> = {
   "dreame nederland": {
     name: "Dreame Nederland",
     slug: "dreame-nederland",
-    metaPageId: "dreame_nederland",
+    metaPageId: "106869335564373", // Real Facebook Page ID — verified via Meta Ads Library API
     tiktokHandle: "@dreame_nl",
     industry: "Smart Home Appliances",
     competitorSlugs: ["roborock", "dyson", "eufy"],
@@ -385,7 +385,7 @@ export const BRAND_RESOLUTION_MOCKS: Record<string, BrandResolutionMock> = {
   "dreame nl": {
     name: "Dreame Nederland",
     slug: "dreame-nederland",
-    metaPageId: "dreame_nederland",
+    metaPageId: "106869335564373", // Real Facebook Page ID — verified via Meta Ads Library API
     tiktokHandle: "@dreame_nl",
     industry: "Smart Home Appliances",
     competitorSlugs: ["roborock", "dyson", "eufy"],

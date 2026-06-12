@@ -112,6 +112,73 @@ export const appRouter = router({
         return searchMetaPages(input.query, 5);
       }),
 
+    // Resolve brand to candidate Meta pages for user confirmation before audit
+    resolveCandidates: publicProcedure
+      .input(z.object({ brandName: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const mock = resolveBrandMock(input.brandName);
+        const candidates: Array<{
+          id: string;
+          name: string;
+          category?: string;
+          fan_count?: number;
+          verification_status?: string;
+          isPreferred: boolean;
+          source: "mock" | "live";
+        }> = [];
+
+        // Add mock-resolved page as preferred candidate if it has a real numeric ID
+        if (mock?.metaPageId && /^\d+$/.test(mock.metaPageId)) {
+          candidates.push({
+            id: mock.metaPageId,
+            name: mock.name,
+            category: mock.industry,
+            isPreferred: true,
+            source: "mock",
+          });
+        }
+
+        // Also search live Meta pages
+        if (process.env.META_ACCESS_TOKEN) {
+          const livePages = await searchMetaPages(input.brandName, 5);
+          for (const p of livePages) {
+            // Don't duplicate if already in candidates
+            if (!candidates.find((c) => c.id === p.id)) {
+              candidates.push({
+                id: p.id,
+                name: p.name,
+                category: p.category,
+                fan_count: p.fan_count,
+                verification_status: p.verification_status,
+                isPreferred: false,
+                source: "live",
+              });
+            }
+          }
+        }
+
+        return {
+          candidates,
+          hasLiveSearch: !!process.env.META_ACCESS_TOKEN,
+          preferredId: mock?.metaPageId && /^\d+$/.test(mock.metaPageId) ? mock.metaPageId : null,
+        };
+      }),
+
+    // Confirm/override the Meta page ID for a brand
+    confirmMetaPage: publicProcedure
+      .input(z.object({ brandSlug: z.string(), metaPageId: z.string() }))
+      .mutation(async ({ input }) => {
+        // Look up existing brand first to get its name (required by upsertBrand)
+        const existing = await getBrandBySlug(input.brandSlug);
+        if (!existing) return { success: false, brand: null };
+        const brand = await upsertBrand({
+          name: existing.name,
+          slug: input.brandSlug,
+          metaPageId: input.metaPageId,
+        });
+        return { success: true, brand };
+      }),
+
     get: publicProcedure
       .input(z.object({ slug: z.string() }))
       .query(async ({ input }) => getBrandBySlug(input.slug)),
@@ -144,7 +211,10 @@ export const appRouter = router({
         z.object({
           brandName: z.string().min(1),
           brandSlug: z.string().min(1),
-          period: z.string().default("2026-05"),
+          period: z.string().default(() => {
+            const now = new Date();
+            return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+          }),
           competitors: z.array(z.string()).max(5).default([]),
           brandDomain: z.string().optional(),
         })

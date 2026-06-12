@@ -140,7 +140,11 @@ export async function fetchMetaAds(config: MetaAdsAPIConfig): Promise<{
     const [year, month] = config.period.split("-").map(Number);
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
     const daysInMonth = new Date(year, month, 0).getDate();
-    const endDate = `${year}-${String(month).padStart(2, "0")}-${daysInMonth}`;
+    // Cap endDate at today — Meta API rejects future dates (error 2334030)
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const rawEndDate = `${year}-${String(month).padStart(2, "0")}-${daysInMonth}`;
+    const endDate = rawEndDate > todayStr ? todayStr : rawEndDate;
 
     const allAds: MetaAdRecord[] = [];
     let nextUrl: string | null = null;
