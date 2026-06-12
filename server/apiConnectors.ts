@@ -725,6 +725,7 @@ export async function fetchBrandAdData(
   metaIsMock: boolean;
   tiktokIsMock: boolean;
   resolvedMetaPageId?: string | null;
+  rawMetaAds?: MetaAdRecord[];
 }> {
   const mockData = getMockAdData(brandSlug);
   let usedMockData = false;
@@ -732,6 +733,7 @@ export async function fetchBrandAdData(
 
   // ── Meta Ads Library ───────────────────────────────────────────────────────
   let meta: AdDataSnapshot | null = null;
+  let rawMetaAds: MetaAdRecord[] | undefined;
   const metaToken = process.env.META_ACCESS_TOKEN;
 
   if (metaToken) {
@@ -754,6 +756,7 @@ export async function fetchBrandAdData(
 
     if (result) {
       meta = result.snapshot;
+      rawMetaAds = result.rawAds;
       console.log(
         `[Meta API] Live data: ${meta.totalAds} ads, ${meta.partnershipAds} partnership ads`
       );
@@ -787,5 +790,5 @@ export async function fetchBrandAdData(
 
   const metaIsMock = meta === mockData.meta;
   const tiktokIsMock = tiktok === mockData.tiktok;
-  return { meta, tiktok, usedMockData, metaIsMock, tiktokIsMock, resolvedMetaPageId };
+  return { meta, tiktok, usedMockData, metaIsMock, tiktokIsMock, resolvedMetaPageId, rawMetaAds };
 }

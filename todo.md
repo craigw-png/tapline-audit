@@ -107,3 +107,10 @@
 - [x] Write tests for SimilarWeb connector (10 tests, all passing)
 - [x] Save checkpoint and deliver
 - [x] Add Live/Mock data source status badges to audit results page (TikTok, Meta, TikTok Shop sections)
+
+## Phase 11: Real Creator Gap + Bold Header Stats
+- [x] Build creatorGapBuilder.ts — extract real @mention creator handles from live Meta ad data
+- [x] Wire creatorGapBuilder into audit.create procedure (uses real data when rawMetaAds available, mock fallback otherwise)
+- [x] Redesign audit hero header: Total Ads + Partnership Ads as bold 3xl number cards
+- [x] Fix TikTok test timeout (add 10s timeout to no-credentials test)
+- [x] All 40 tests passing

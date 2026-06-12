@@ -558,34 +558,33 @@ export default function AuditPage() {
                 )}
               </div>
               <h1 className="text-2xl md:text-3xl font-bold mb-1">{audit.brandName}</h1>
-              <p className="text-muted-foreground text-sm">
-                Andromeda Readiness Audit · {audit.totalAds ?? 0} ads analysed
+              <p className="text-muted-foreground text-sm mb-4">
+                Andromeda Readiness Audit
               </p>
-              <div className="flex flex-wrap items-center gap-4 mt-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Est. Spend</p>
-                  <p className="font-semibold text-sm">
-                    {fmtCurrency(audit.estimatedSpendMin ?? 0)} – {fmtCurrency(audit.estimatedSpendMax ?? 0)}
-                  </p>
+
+              {/* Hero stat row — bold numbers front and centre */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-background/60 rounded-xl border border-border/50 p-3 text-center">
+                  <p className="text-3xl font-black tabular-nums leading-none">{audit.totalAds ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">Total Ads</p>
                 </div>
-                <div className="w-px h-8 bg-border" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Est. Impressions</p>
-                  <p className="font-semibold text-sm">
-                    {fmt(audit.estimatedImpressionsMin ?? 0)} – {fmt(audit.estimatedImpressionsMax ?? 0)}
-                  </p>
+                <div className="bg-background/60 rounded-xl border border-primary/30 p-3 text-center">
+                  <p className="text-3xl font-black tabular-nums leading-none text-primary">{audit.partnershipAds ?? 0}</p>
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">Partnership Ads</p>
+                  <p className="text-xs text-primary/70 font-semibold">{partnershipPct}%</p>
                 </div>
-                <div className="w-px h-8 bg-border" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Partnership Ads</p>
-                  <p className="font-semibold text-sm">
-                    {audit.partnershipAds ?? 0} / {audit.totalAds ?? 0} ({partnershipPct}%)
-                  </p>
+                <div className="bg-background/60 rounded-xl border border-border/50 p-3 text-center">
+                  <p className="text-3xl font-black tabular-nums leading-none">{estimatedConcepts}</p>
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">Est. Concepts</p>
                 </div>
-                <div className="w-px h-8 bg-border" />
-                <div>
-                  <p className="text-xs text-muted-foreground">Est. Concepts</p>
-                  <p className="font-semibold text-sm">{estimatedConcepts}</p>
+                <div className="bg-background/60 rounded-xl border border-border/50 p-3 text-center">
+                  <p className="text-lg font-bold tabular-nums leading-none">
+                    {fmtCurrency(audit.estimatedSpendMin ?? 0)}–{fmtCurrency(audit.estimatedSpendMax ?? 0)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 font-medium">Est. Spend</p>
+                  <p className="text-xs text-muted-foreground">
+                    {fmt(audit.estimatedImpressionsMin ?? 0)}–{fmt(audit.estimatedImpressionsMax ?? 0)} impr.
+                  </p>
                 </div>
               </div>
             </div>

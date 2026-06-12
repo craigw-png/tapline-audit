@@ -28,6 +28,7 @@ import {
   COMPETITOR_MOCKS,
 } from "./mockData";
 import { fetchBrandAdData, searchMetaPages, resolveMetaPageId } from "./apiConnectors";
+import { buildCreatorGapFromMetaAds } from "./creatorGapBuilder";
 import { fetchAccountLevelData } from "./accountConnectors";
 import { fetchTikTokShopIntelligence } from "./tiktokShopConnector";
 import { fetchSimilarWebData, getMockSimilarWebData } from "./similarwebConnector";
@@ -203,7 +204,11 @@ export const appRouter = router({
           });
           console.log(`[Audit] Persisted resolved Meta page ID ${adData.resolvedMetaPageId} for ${input.brandName}`);
         }
-        const { creatorGap } = getMockAdData(input.brandSlug);
+        // Build creator gap from real Meta ad data when available, else fall back to mock
+        const { creatorGap: mockCreatorGap } = getMockAdData(input.brandSlug);
+        const creatorGap = adData.rawMetaAds && adData.rawMetaAds.length > 0
+          ? buildCreatorGapFromMetaAds(adData.rawMetaAds)
+          : mockCreatorGap;
 
         // 4. Combine Meta + TikTok
         const totalAds = meta.totalAds + tiktok.totalAds;

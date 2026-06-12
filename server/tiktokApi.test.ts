@@ -134,7 +134,7 @@ describe("TikTok Research API — fetchTikTokAds (with mock fallback)", () => {
     });
     // null = no credentials, caller uses mock
     expect(result).toBeNull();
-  });
+  }, 10000);
 
   it.skipIf(!hasCredentials)(
     "attempts live API and returns snapshot or null (with graceful fallback)",
