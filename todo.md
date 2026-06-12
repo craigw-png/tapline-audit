@@ -114,3 +114,10 @@
 - [x] Redesign audit hero header: Total Ads + Partnership Ads as bold 3xl number cards
 - [x] Fix TikTok test timeout (add 10s timeout to no-credentials test)
 - [x] All 40 tests passing
+
+## Phase 12: Creator Gap Data Integrity Fix
+- [x] Fix creator gap: never show fabricated handles — use real Meta data or honest empty state
+- [x] Show clear "Not enough data" state when real @mentions cannot be extracted from ad copy
+- [x] Hide TikTok demo data from header stats and platform breakdown (show only when TikTok is live)
+- [x] Make Meta Ads + Meta Partnership Ads the dominant hero numbers on the Overview (Meta-only label when TikTok is mock)
+- [x] Remove mock creator handle fallback — show honest empty state instead

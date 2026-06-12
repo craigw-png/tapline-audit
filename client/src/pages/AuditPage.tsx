@@ -479,6 +479,14 @@ export default function AuditPage() {
   const creatorGap = audit.creatorGapData;
   const gapCreators = creatorGap?.organicCreators.filter((c) => !c.inPaidPartnership) ?? [];
 
+  // When TikTok is mock, show Meta-only numbers in hero stats
+  const tiktokIsMock = (audit as any).tiktokIsMock !== false;
+  const metaIsMock = (audit as any).metaIsMock !== false;
+  const heroTotalAds = tiktokIsMock ? (audit.metaAdsData?.totalAds ?? 0) : (audit.totalAds ?? 0);
+  const heroPartnershipAds = tiktokIsMock ? (audit.metaAdsData?.partnershipAds ?? 0) : (audit.partnershipAds ?? 0);
+  const heroPartnershipPct = heroTotalAds > 0 ? ((heroPartnershipAds / heroTotalAds) * 100).toFixed(1) : "0.0";
+  const heroPlatformLabel = tiktokIsMock ? "Meta Ads" : "All Platforms";
+
   return (
     <div className="min-h-screen bg-background grid-bg" ref={reportRef}>
       {/* Header */}
@@ -565,13 +573,15 @@ export default function AuditPage() {
               {/* Hero stat row — bold numbers front and centre */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 <div className="bg-background/60 rounded-xl border border-border/50 p-3 text-center">
-                  <p className="text-3xl font-black tabular-nums leading-none">{audit.totalAds ?? 0}</p>
+                  <p className="text-3xl font-black tabular-nums leading-none">{heroTotalAds}</p>
                   <p className="text-xs text-muted-foreground mt-1 font-medium">Total Ads</p>
+                  {tiktokIsMock && <p className="text-[10px] text-amber-400/70 mt-0.5">Meta only</p>}
                 </div>
                 <div className="bg-background/60 rounded-xl border border-primary/30 p-3 text-center">
-                  <p className="text-3xl font-black tabular-nums leading-none text-primary">{audit.partnershipAds ?? 0}</p>
+                  <p className="text-3xl font-black tabular-nums leading-none text-primary">{heroPartnershipAds}</p>
                   <p className="text-xs text-muted-foreground mt-1 font-medium">Partnership Ads</p>
-                  <p className="text-xs text-primary/70 font-semibold">{partnershipPct}%</p>
+                  <p className="text-xs text-primary/70 font-semibold">{heroPartnershipPct}%</p>
+                  {tiktokIsMock && <p className="text-[10px] text-amber-400/70 mt-0.5">Meta only</p>}
                 </div>
                 <div className="bg-background/60 rounded-xl border border-border/50 p-3 text-center">
                   <p className="text-3xl font-black tabular-nums leading-none">{estimatedConcepts}</p>
@@ -740,35 +750,75 @@ export default function AuditPage() {
                   Platform Breakdown
                 </h3>
                 <div className="space-y-4">
-                  {[
-                    { label: "Meta", data: audit.metaAdsData, color: "bg-blue-500", icon: "📘", isMock: (audit as any).metaIsMock !== false },
-                    { label: "TikTok", data: audit.tiktokAdsData, color: "bg-pink-500", icon: "🎵", isMock: (audit as any).tiktokIsMock !== false },
-                  ].map(({ label, data, color, icon, isMock }) => (
-                    <div key={label} className="bg-muted/30 rounded-xl p-4">
+                  {/* Meta platform card — always shown */}
+                  <div className="bg-muted/30 rounded-xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-medium text-sm flex items-center gap-2">
+                        <span>📘</span> Meta
+                        {metaIsMock ? (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            Demo
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            Live
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{audit.metaAdsData?.totalAds ?? 0} ads</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Partnership Ads</p>
+                        <p className="font-semibold">
+                          {audit.metaAdsData?.partnershipAds ?? 0} (
+                          {audit.metaAdsData?.totalAds
+                            ? ((audit.metaAdsData.partnershipAds / audit.metaAdsData.totalAds) * 100).toFixed(1)
+                            : 0}
+                          %)
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Est. Spend</p>
+                        <p className="font-semibold">
+                          {fmtCurrency(audit.metaAdsData?.spendMin ?? 0)} – {fmtCurrency(audit.metaAdsData?.spendMax ?? 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Impressions</p>
+                        <p className="font-semibold">
+                          {fmt(audit.metaAdsData?.impressionsMin ?? 0)} – {fmt(audit.metaAdsData?.impressionsMax ?? 0)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Avg Duration</p>
+                        <p className="font-semibold">{audit.metaAdsData?.avgDurationDays ?? 0} days</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* TikTok platform card — only shown when live data is available */}
+                  {!tiktokIsMock ? (
+                    <div className="bg-muted/30 rounded-xl p-4">
                       <div className="flex items-center justify-between mb-3">
                         <span className="font-medium text-sm flex items-center gap-2">
-                          <span>{icon}</span> {label}
-                          {isMock ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
-                              Demo
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                              Live
-                            </span>
-                          )}
+                          <span>🎵</span> TikTok
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                            Live
+                          </span>
                         </span>
-                        <span className="text-xs text-muted-foreground">{data?.totalAds ?? 0} ads</span>
+                        <span className="text-xs text-muted-foreground">{audit.tiktokAdsData?.totalAds ?? 0} ads</span>
                       </div>
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div>
                           <p className="text-muted-foreground">Partnership Ads</p>
                           <p className="font-semibold">
-                            {data?.partnershipAds ?? 0} (
-                            {data?.totalAds
-                              ? ((data.partnershipAds / data.totalAds) * 100).toFixed(1)
+                            {audit.tiktokAdsData?.partnershipAds ?? 0} (
+                            {audit.tiktokAdsData?.totalAds
+                              ? ((audit.tiktokAdsData.partnershipAds / audit.tiktokAdsData.totalAds) * 100).toFixed(1)
                               : 0}
                             %)
                           </p>
@@ -776,22 +826,30 @@ export default function AuditPage() {
                         <div>
                           <p className="text-muted-foreground">Est. Spend</p>
                           <p className="font-semibold">
-                            {fmtCurrency(data?.spendMin ?? 0)} – {fmtCurrency(data?.spendMax ?? 0)}
+                            {fmtCurrency(audit.tiktokAdsData?.spendMin ?? 0)} – {fmtCurrency(audit.tiktokAdsData?.spendMax ?? 0)}
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Impressions</p>
                           <p className="font-semibold">
-                            {fmt(data?.impressionsMin ?? 0)} – {fmt(data?.impressionsMax ?? 0)}
+                            {fmt(audit.tiktokAdsData?.impressionsMin ?? 0)} – {fmt(audit.tiktokAdsData?.impressionsMax ?? 0)}
                           </p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Avg Duration</p>
-                          <p className="font-semibold">{data?.avgDurationDays ?? 0} days</p>
+                          <p className="font-semibold">{audit.tiktokAdsData?.avgDurationDays ?? 0} days</p>
                         </div>
                       </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="bg-muted/10 rounded-xl p-4 border border-dashed border-border/40 flex items-center gap-3">
+                      <span className="text-2xl opacity-40">🎵</span>
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">TikTok Ads</p>
+                        <p className="text-xs text-muted-foreground/60 mt-0.5">Live data coming soon — TikTok Research API integration in progress</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -950,7 +1008,7 @@ export default function AuditPage() {
 
           {/* Creator Gap Tab */}
           <TabsContent value="creators" className="space-y-6">
-            {creatorGap ? (
+            {creatorGap && !metaIsMock ? (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="glass rounded-xl p-4 text-center">
@@ -1011,8 +1069,29 @@ export default function AuditPage() {
                 </div>
               </>
             ) : (
-              <div className="glass rounded-2xl p-10 text-center">
-                <p className="text-muted-foreground">No creator gap data available.</p>
+              <div className="glass rounded-2xl p-10 text-center space-y-4">
+                <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center mx-auto">
+                  <Users className="w-7 h-7 text-amber-400" />
+                </div>
+                <div>
+                  <p className="font-semibold text-lg mb-2">Creator Data Requires Live Meta Connection</p>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
+                    Creator handles are extracted directly from live Meta ad copy — we scan for @mentions and paid partnership disclosures in real ads. This audit is currently running on demo data, so no real creator handles are available.
+                  </p>
+                </div>
+                <div className="bg-muted/30 rounded-xl p-4 max-w-sm mx-auto text-left">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">How to unlock creator data</p>
+                  <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
+                    <li>Run a new audit for this brand</li>
+                    <li>Meta Ads Library API will pull live ad copy</li>
+                    <li>Creator @handles are extracted automatically</li>
+                  </ol>
+                </div>
+                {metaIsMock && (
+                  <p className="text-xs text-amber-400/80">
+                    Meta is currently in demo mode. Once live, creator extraction runs automatically.
+                  </p>
+                )}
               </div>
             )}
           </TabsContent>

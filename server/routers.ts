@@ -23,7 +23,6 @@ import {
 import { scoreAndromeda } from "./andromeda";
 import {
   resolveBrandMock,
-  getMockAdData,
   getCompetitorMocks,
   COMPETITOR_MOCKS,
 } from "./mockData";
@@ -204,11 +203,12 @@ export const appRouter = router({
           });
           console.log(`[Audit] Persisted resolved Meta page ID ${adData.resolvedMetaPageId} for ${input.brandName}`);
         }
-        // Build creator gap from real Meta ad data when available, else fall back to mock
-        const { creatorGap: mockCreatorGap } = getMockAdData(input.brandSlug);
+        // Build creator gap from real Meta ad data when available.
+        // IMPORTANT: Never fall back to mock creator handles — they are fabricated.
+        // If no live Meta ads are available, store null so the frontend shows an honest empty state.
         const creatorGap = adData.rawMetaAds && adData.rawMetaAds.length > 0
           ? buildCreatorGapFromMetaAds(adData.rawMetaAds)
-          : mockCreatorGap;
+          : null;
 
         // 4. Combine Meta + TikTok
         const totalAds = meta.totalAds + tiktok.totalAds;
