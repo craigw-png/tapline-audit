@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, ArrowRight, Plus, X, Zap, Check, Clock, ShieldCheck, AlertCircle, Search, ExternalLink, Users, ChevronDown, ChevronUp } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, X, Zap, Check, Clock, ShieldCheck, AlertCircle, Search, ExternalLink, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -309,16 +309,21 @@ export default function NewAuditPage() {
                             Recommended
                           </Badge>
                         )}
+                        {c.ad_count !== undefined && (
+                          <Badge className={`text-xs px-1.5 py-0 ${
+                            c.ad_count > 10
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              : c.ad_count > 0
+                              ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                              : "bg-muted text-muted-foreground border-border"
+                          }`}>
+                            {c.ad_count} ads / 90d
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5">
                         {c.category && (
                           <span className="text-xs text-muted-foreground">{c.category}</span>
-                        )}
-                        {c.fan_count && (
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                            <Users className="w-3 h-3" />
-                            {formatFanCount(c.fan_count)}
-                          </span>
                         )}
                         <span className="text-xs text-muted-foreground font-mono">ID: {c.id}</span>
                       </div>

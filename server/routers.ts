@@ -123,6 +123,7 @@ export const appRouter = router({
           category?: string;
           fan_count?: number;
           verification_status?: string;
+          ad_count?: number;
           isPreferred: boolean;
           source: "mock" | "live";
         }> = [];
@@ -155,6 +156,49 @@ export const appRouter = router({
               });
             }
           }
+
+          // Enrich each candidate with ad count from the last 90 days
+          const token = process.env.META_ACCESS_TOKEN;
+          const today = new Date();
+          const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+          const startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 90);
+          const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}`;
+
+          await Promise.all(
+            candidates.map(async (c) => {
+              try {
+                const params = new URLSearchParams({
+                  access_token: token,
+                  search_page_ids: c.id,
+                  ad_reached_countries: '["NL","GB","DE","FR","US"]',
+                  ad_type: "ALL",
+                  ad_active_status: "ALL",
+                  ad_delivery_date_min: startStr,
+                  ad_delivery_date_max: todayStr,
+                  fields: "id",
+                  limit: "100",
+                });
+                const r = await fetch(
+                  `https://graph.facebook.com/v21.0/ads_archive?${params.toString()}`,
+                  { signal: AbortSignal.timeout(8000) }
+                );
+                if (r.ok) {
+                  const d: { data?: unknown[] } = await r.json();
+                  c.ad_count = d.data?.length ?? 0;
+                }
+              } catch {
+                // silently skip — ad_count stays undefined
+              }
+            })
+          );
+
+          // Re-sort: preferred first, then by ad_count descending
+          candidates.sort((a, b) => {
+            if (a.isPreferred && !b.isPreferred) return -1;
+            if (!a.isPreferred && b.isPreferred) return 1;
+            return (b.ad_count ?? 0) - (a.ad_count ?? 0);
+          });
         }
 
         return {
