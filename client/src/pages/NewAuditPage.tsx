@@ -50,6 +50,8 @@ export default function NewAuditPage() {
   const [periodPreset, setPeriodPreset] = useState("last-90");
   const [brandDomain, setBrandDomain] = useState("");
 
+  const utils = trpc.useUtils();
+
   // Brand account confirmation state
   const [confirmedMetaPageId, setConfirmedMetaPageId] = useState<string | null>(null);
   const [showAllCandidates, setShowAllCandidates] = useState(false);
@@ -115,16 +117,56 @@ export default function NewAuditPage() {
     setShowManualInput(false);
   };
 
-  const handleManualConfirm = () => {
-    const id = manualPageId.trim();
-    if (!/^\d+$/.test(id)) {
-      toast.error("Page ID must be a numeric Facebook Page ID (e.g. 106869335564373)");
+  const [resolvingUrl, setResolvingUrl] = useState(false);
+
+  // Extract page slug from a Facebook URL, e.g. https://www.facebook.com/Emma.Sleep.nl → Emma.Sleep.nl
+  function extractFbSlug(input: string): string | null {
+    try {
+      const url = new URL(input);
+      if (url.hostname.includes("facebook.com")) {
+        const slug = url.pathname.replace(/^\//, "").split("/")[0];
+        return slug || null;
+      }
+    } catch {
+      // Not a URL
+    }
+    return null;
+  }
+
+  const handleManualConfirm = async () => {
+    const raw = manualPageId.trim();
+    if (!raw) return;
+
+    // If it's already a numeric ID, use directly
+    if (/^\d+$/.test(raw)) {
+      setConfirmedMetaPageId(raw);
+      setShowManualInput(false);
+      setManualPageId("");
+      toast.success("Meta Page ID confirmed");
       return;
     }
-    setConfirmedMetaPageId(id);
-    setShowManualInput(false);
-    setManualPageId("");
-    toast.success("Custom Meta Page ID set");
+
+    // If it's a Facebook URL, extract the slug and search for it
+    const slug = extractFbSlug(raw) ?? raw;
+    setResolvingUrl(true);
+    try {
+      // Search the Ads Archive using the slug as search term
+      const result = await utils.brand.resolveCandidates.fetch({ brandName: slug });
+      if (result.candidates.length > 0) {
+        // Pick the best match
+        const best = result.candidates[0];
+        setConfirmedMetaPageId(best.id);
+        setShowManualInput(false);
+        setManualPageId("");
+        toast.success(`Found: ${best.name} (ID: ${best.id})`);
+      } else {
+        toast.error(`Could not find a Meta page for "${slug}". Try pasting the numeric Page ID instead.`);
+      }
+    } catch {
+      toast.error("Failed to resolve the URL. Please try a numeric Page ID.");
+    } finally {
+      setResolvingUrl(false);
+    }
   };
 
   const handleStart = async () => {
@@ -323,21 +365,32 @@ export default function NewAuditPage() {
               Enter Page ID manually
             </button>
           ) : (
-            <div className="flex gap-2 mt-2">
+            <div className="space-y-1.5 mt-2">
               <Input
                 value={manualPageId}
                 onChange={(e) => setManualPageId(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleManualConfirm()}
-                placeholder="e.g. 106869335564373"
-                className="h-9 text-sm bg-input/50 font-mono"
+                placeholder="Paste Facebook URL or numeric Page ID"
+                className="h-9 text-sm bg-input/50"
                 autoFocus
+                disabled={resolvingUrl}
               />
-              <Button variant="outline" size="sm" onClick={handleManualConfirm} className="shrink-0">
-                Use this ID
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => { setShowManualInput(false); setManualPageId(""); }} className="shrink-0">
-                Cancel
-              </Button>
+              <p className="text-xs text-muted-foreground">
+                Accepts: <span className="font-mono">https://www.facebook.com/Emma.Sleep.nl</span> or a numeric ID like <span className="font-mono">249220112144810</span>
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={handleManualConfirm} disabled={!manualPageId.trim() || resolvingUrl} className="shrink-0">
+                  {resolvingUrl ? (
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      Resolving...
+                    </span>
+                  ) : "Use this"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => { setShowManualInput(false); setManualPageId(""); }} className="shrink-0" disabled={resolvingUrl}>
+                  Cancel
+                </Button>
+              </div>
             </div>
           )}
 

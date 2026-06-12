@@ -334,8 +334,15 @@ export interface MetaPageResult {
 }
 
 /**
- * Search for Meta Pages by name to resolve a brand to its Page ID.
- * Uses the Graph API /pages/search endpoint.
+ * Search for Meta Pages by brand name using the Ads Archive endpoint.
+ * The /pages/search Graph API requires pages_read_engagement permission which
+ * our token doesn't have. Instead we search the Ads Archive and deduplicate
+ * by page_id — this gives us real pages that are actually running ads.
+ *
+ * Tries multiple keyword variations to maximise recall:
+ *   1. Exact brand name
+ *   2. First word only (e.g. "Emma" from "Emma Sleep NL")
+ *   3. First two words (e.g. "Emma Sleep")
  */
 export async function searchMetaPages(
   query: string,
@@ -344,32 +351,87 @@ export async function searchMetaPages(
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) return [];
 
-  try {
-    const params = new URLSearchParams({
-      access_token: token,
-      q: query,
-      type: "page",
-      fields: "id,name,category,fan_count,verification_status,picture",
-      limit: String(limit),
-    });
+  // Build search term variations to maximise recall
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  const variations = Array.from(new Set([
+    query.trim(),
+    words.slice(0, 2).join(" "),  // first two words
+    words[0],                      // first word only
+  ].filter((v) => v.length >= 2)));
 
-    const response = await fetch(
-      `${META_BASE_URL}/pages/search?${params.toString()}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  // Search last 90 days
+  const startDate = new Date(today);
+  startDate.setDate(startDate.getDate() - 90);
+  const startStr = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, "0")}-${String(startDate.getDate()).padStart(2, "0")}`;
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      console.warn("[Meta Page Search] Error:", err?.error?.message ?? response.status);
-      return [];
+  const pageMap = new Map<string, MetaPageResult>(); // page_id → result
+
+  for (const term of variations) {
+    if (pageMap.size >= limit) break;
+    try {
+      const params = new URLSearchParams({
+        access_token: token,
+        search_terms: term,
+        ad_reached_countries: '["NL","GB","DE","FR","US"]',
+        ad_type: "ALL",
+        ad_active_status: "ALL",
+        ad_delivery_date_min: startStr,
+        ad_delivery_date_max: todayStr,
+        fields: "page_id,page_name",
+        limit: "50",
+      });
+
+      const response = await fetch(
+        `${META_BASE_URL}/ads_archive?${params.toString()}`,
+        { signal: AbortSignal.timeout(12000) }
+      );
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        console.warn("[Meta Page Search] Ads Archive error:", err?.error?.message ?? response.status);
+        continue;
+      }
+
+      const data: { data?: Array<{ page_id?: string; page_name?: string }> } = await response.json();
+      for (const ad of data.data ?? []) {
+        if (ad.page_id && ad.page_name && !pageMap.has(ad.page_id)) {
+          pageMap.set(ad.page_id, {
+            id: ad.page_id,
+            name: ad.page_name,
+          });
+        }
+      }
+    } catch (error) {
+      console.warn(`[Meta Page Search] Request failed for "${term}":`, error);
     }
-
-    const data = await response.json();
-    return (data.data ?? []) as MetaPageResult[];
-  } catch (error) {
-    console.warn("[Meta Page Search] Request failed:", error);
-    return [];
   }
+
+  // Score pages by name relevance to the query
+  // Higher score = better match
+  const queryWords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 1 && w !== "nl" && w !== "uk" && w !== "de" && w !== "fr" && w !== "us");
+  const queryLower = queryWords.join(" ");
+
+  function scoreMatch(pageName: string): number {
+    const nameLower = pageName.toLowerCase();
+    let score = 0;
+    // Exact match (ignoring country suffixes)
+    if (nameLower === queryLower) score += 100;
+    // Name contains all query words
+    const allWords = queryWords.every((w) => nameLower.includes(w));
+    if (allWords) score += 50;
+    // Name contains first query word
+    if (queryWords[0] && nameLower.includes(queryWords[0])) score += 20;
+    // Name starts with first query word
+    if (queryWords[0] && nameLower.startsWith(queryWords[0])) score += 10;
+    return score;
+  }
+
+  const results = Array.from(pageMap.values()).sort((a, b) => scoreMatch(b.name) - scoreMatch(a.name));
+
+  console.log(`[Meta Page Search] Found ${results.length} candidate pages for "${query}", top: ${results[0]?.name ?? "none"}`);
+  return results.slice(0, limit);
 }
 
 /**
