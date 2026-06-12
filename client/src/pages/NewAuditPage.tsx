@@ -1,11 +1,36 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, ArrowRight, Plus, X, Zap, Check } from "lucide-react";
+import { ArrowLeft, ArrowRight, Plus, X, Zap, Check, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+
+const PERIOD_PRESETS = [
+  { value: "last-30", label: "Last 30 days", description: "~1 month of ad activity" },
+  { value: "last-90", label: "Last 90 days", description: "~3 months — recommended" },
+  { value: "last-180", label: "Last 6 months", description: "Mid-term trend view" },
+  { value: "last-365", label: "Last 12 months", description: "Full year overview" },
+];
+
+function resolvePresetToPeriod(preset: string): string {
+  const now = new Date();
+  const offsets: Record<string, number> = {
+    "last-30": 30,
+    "last-90": 90,
+    "last-180": 180,
+    "last-365": 365,
+  };
+  const days = offsets[preset];
+  if (days) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - days);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+  // Already a YYYY-MM string
+  return preset;
+}
 
 export default function NewAuditPage() {
   const [, navigate] = useLocation();
@@ -16,7 +41,7 @@ export default function NewAuditPage() {
 
   const [competitors, setCompetitors] = useState<string[]>([]);
   const [customInput, setCustomInput] = useState("");
-  const [period] = useState("2026-05");
+  const [periodPreset, setPeriodPreset] = useState("last-90");
   const [brandDomain, setBrandDomain] = useState("");
 
   const { data: suggestions } = trpc.competitor.suggest.useQuery(
@@ -63,11 +88,13 @@ export default function NewAuditPage() {
     createAudit.mutate({
       brandName,
       brandSlug,
-      period,
+      period: resolvePresetToPeriod(periodPreset),
       competitors,
       brandDomain: brandDomain.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "") || undefined,
     });
   };
+
+  const selectedPreset = PERIOD_PRESETS.find((p) => p.value === periodPreset);
 
   return (
     <div className="min-h-screen bg-background grid-bg">
@@ -105,7 +132,7 @@ export default function NewAuditPage() {
             <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary flex items-center justify-center">
               <span className="text-xs font-bold text-primary">2</span>
             </div>
-            <span className="text-sm font-medium text-primary">Add Competitors</span>
+            <span className="text-sm font-medium text-primary">Configure Audit</span>
           </div>
           <div className="flex-1 h-px bg-border" />
           <div className="flex items-center gap-2">
@@ -118,15 +145,45 @@ export default function NewAuditPage() {
 
         {/* Brand info */}
         <div className="glass rounded-2xl p-5 mb-6">
-          <div className="flex items-start justify-between">
+          <div className="flex items-start justify-between mb-4">
             <div>
               <p className="text-xs text-muted-foreground mb-1">Auditing</p>
               <h2 className="text-xl font-bold">{brandName}</h2>
-              <p className="text-xs text-muted-foreground mt-1">Period: {period}</p>
             </div>
             <Badge className="bg-primary/10 text-primary border-primary/20">
               Combined (Meta + TikTok)
             </Badge>
+          </div>
+
+          {/* Time period selector */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-3">
+              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Time Period</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 mb-2">
+              {PERIOD_PRESETS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setPeriodPreset(opt.value)}
+                  className={`px-3 py-2.5 rounded-xl text-sm border transition-all text-left ${
+                    periodPreset === opt.value
+                      ? "bg-primary/15 border-primary/50 text-primary"
+                      : "bg-muted/30 border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"
+                  }`}
+                >
+                  <div className={`font-medium text-xs ${periodPreset === opt.value ? "text-primary" : "text-foreground"}`}>
+                    {opt.label}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5 leading-tight">{opt.description}</div>
+                </button>
+              ))}
+            </div>
+            {selectedPreset && (
+              <p className="text-xs text-muted-foreground">
+                Analysing ad activity from the <span className="text-foreground font-medium">{selectedPreset.label.toLowerCase()}</span>
+              </p>
+            )}
           </div>
         </div>
 
@@ -235,13 +292,13 @@ export default function NewAuditPage() {
           ) : (
             <span className="flex items-center gap-2">
               <Zap className="w-4 h-4" />
-              Run Audit
+              Run Audit — {selectedPreset?.label}
               <ArrowRight className="w-4 h-4" />
             </span>
           )}
         </Button>
         <p className="text-center text-xs text-muted-foreground mt-3">
-          Live Meta Ads Library data when token is configured · TikTok integration coming soon
+          Live Meta Ads Library data · TikTok Research API connected
         </p>
       </main>
     </div>
