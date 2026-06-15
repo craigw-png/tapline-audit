@@ -86,7 +86,7 @@ export default function Home() {
     setResolving(true);
     setNotice(null);
     try {
-      const res = await utils.brand.resolveCandidates.fetch({ brandName: brandName.trim() });
+      const res = await utils.brand.resolveCandidates.fetch({ brandName: brandName.trim(), countryCode: country });
       setCandidates(res.candidates);
       if (!res.candidates.length) {
         setNotice(

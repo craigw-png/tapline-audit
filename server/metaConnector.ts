@@ -169,7 +169,7 @@ function isoDate(d: Date): string {
  * actually running ads. Returns {id, name} only — present these to the user to
  * CONFIRM before auditing, rather than silently picking one.
  */
-export async function searchMetaPages(query: string, limit = 5): Promise<MetaPageResult[]> {
+export async function searchMetaPages(query: string, limit = 5, countryCode = "NL"): Promise<MetaPageResult[]> {
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) return [];
 
@@ -189,7 +189,7 @@ export async function searchMetaPages(query: string, limit = 5): Promise<MetaPag
       const params = new URLSearchParams({
         access_token: token,
         search_terms: term,
-        ad_reached_countries: '["NL","BE","DE","FR","GB"]',
+        ad_reached_countries: `["${countryCode}"]`,
         ad_type: "ALL",
         ad_active_status: "ALL",
         ad_delivery_date_min: isoDate(start),
