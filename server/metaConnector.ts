@@ -33,6 +33,7 @@ const PUBLIC_LIBRARY_BASE = "https://www.facebook.com/ads/library";
 // Word-boundary matching (fixes the old substring bug where "#ad" matched inside
 // "#additional" and "ambassador" matched anywhere). These flag CANDIDATES only.
 const PARTNERSHIP_PATTERNS: RegExp[] = [
+  // English — explicit paid partnership labels
   /\bpaid partnership\b/i,
   /\bpaid collaboration\b/i,
   /\bin collaboration with\b/i,
@@ -40,12 +41,36 @@ const PARTNERSHIP_PATTERNS: RegExp[] = [
   /\bsponsored by\b/i,
   /\bcreator partner\b/i,
   /\bbrand ambassador\b/i,
+  // English hashtags
   /#ad\b/i,
   /#paidpartnership\b/i,
   /#sponsored\b/i,
   /#gifted\b/i,
   /#brandpartner\b/i,
   /#ambassador\b/i,
+  // Dutch — "AD |" or "AD l" pipe/bar format (e.g. "AD | Ik maakte..." or "AD l new coffee...")
+  // Must be at start of text or after whitespace to avoid matching "ad" inside words
+  /(?:^|\s)AD\s*[|l]/,
+  // Dutch — "advertentie ||" or "|| advertentie" (pipe-wrapped)
+  /advertentie/i,
+  /\|\|\s*advertentie/i,
+  /advertentie\s*\|\|/i,
+  // Dutch — collaboration / partnership phrases
+  /\bsamenwerking\b/i,
+  /\bin samenwerking met\b/i,
+  /\bbetaalde samenwerking\b/i,
+  /\bin opdracht van\b/i,
+  // Dutch hashtags
+  /#reclame\b/i,
+  /#samenwerking\b/i,
+  /#betaaldesamenwerking\b/i,
+  /#gifted\b/i,
+  // French (BE/FR market)
+  /\bpartenariat\b/i,
+  /\ben partenariat avec\b/i,
+  /\bpublicit\u00e9\b/i,
+  /#partenariat\b/i,
+  /#publi\b/i,
 ];
 
 function isCandidatePartnership(texts: string[]): boolean {
