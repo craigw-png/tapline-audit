@@ -17,13 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+
 type Outputs = inferRouterOutputs<AppRouter>;
 type CreateResult = Outputs["audit"]["create"];
 type Candidate = Outputs["brand"]["resolveCandidates"]["candidates"][number];
 
 type Phase = "input" | "candidates" | "result";
 
-const COUNTRIES = [
+const ALL_COUNTRIES = [
   { code: "NL", label: "Netherlands" },
   { code: "BE", label: "Belgium" },
   { code: "DE", label: "Germany" },
@@ -44,10 +45,42 @@ const COUNTRIES = [
   { code: "HU", label: "Hungary" },
   { code: "RO", label: "Romania" },
   { code: "GR", label: "Greece" },
+  { code: "HR", label: "Croatia" },
+  { code: "SK", label: "Slovakia" },
+  { code: "SI", label: "Slovenia" },
+  { code: "BG", label: "Bulgaria" },
+  { code: "LT", label: "Lithuania" },
+  { code: "LV", label: "Latvia" },
+  { code: "EE", label: "Estonia" },
+  { code: "LU", label: "Luxembourg" },
+  { code: "MT", label: "Malta" },
+  { code: "CY", label: "Cyprus" },
   { code: "US", label: "United States" },
   { code: "CA", label: "Canada" },
   { code: "AU", label: "Australia" },
+  { code: "NZ", label: "New Zealand" },
+  { code: "ZA", label: "South Africa" },
+  { code: "AE", label: "United Arab Emirates" },
+  { code: "SA", label: "Saudi Arabia" },
+  { code: "TR", label: "Turkey" },
+  { code: "IL", label: "Israel" },
+  { code: "JP", label: "Japan" },
+  { code: "SG", label: "Singapore" },
+  { code: "IN", label: "India" },
+  { code: "BR", label: "Brazil" },
+  { code: "MX", label: "Mexico" },
 ];
+
+function resolveCountryCode(input: string): string {
+  const trimmed = input.trim().toUpperCase();
+  // If it looks like an ISO code already (2 letters), use it directly
+  if (/^[A-Z]{2}$/.test(trimmed)) return trimmed;
+  // Otherwise try to match by label
+  const match = ALL_COUNTRIES.find(
+    (c) => c.label.toLowerCase() === input.trim().toLowerCase()
+  );
+  return match?.code ?? trimmed.slice(0, 2);
+}
 
 function toCardData(r: CreateResult, fallbackBrand: string, sourceLabel: string): AuditCardData | null {
   if (!r.result) return null;
@@ -216,19 +249,34 @@ export default function Home() {
               />
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <Label>Market</Label>
-                  <Select value={country} onValueChange={setCountry}>
-                    <SelectTrigger className="mt-2">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COUNTRIES.map((c) => (
-                        <SelectItem key={c.code} value={c.code}>
-                          {c.label}
-                        </SelectItem>
+                  <Label htmlFor="country-input">Market</Label>
+                  <div className="relative mt-2">
+                    <Input
+                      id="country-input"
+                      list="country-list"
+                      value={country}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // If user typed a known country name, convert to ISO code
+                        const match = ALL_COUNTRIES.find(
+                          (c) => c.label.toLowerCase() === val.toLowerCase()
+                        );
+                        setCountry(match ? match.code : val.toUpperCase().slice(0, 2) || val);
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val) setCountry(resolveCountryCode(val));
+                      }}
+                      placeholder="NL, GB, DE…"
+                      className="uppercase"
+                      maxLength={2}
+                    />
+                    <datalist id="country-list">
+                      {ALL_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.label}</option>
                       ))}
-                    </SelectContent>
-                  </Select>
+                    </datalist>
+                  </div>
                 </div>
                 <div>
                   <Label>Window</Label>
