@@ -247,8 +247,24 @@ export default function Home() {
                         disabled={createAudit.isPending}
                         className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-left transition hover:border-primary disabled:opacity-50"
                       >
-                        <span className="font-medium">{c.name}</span>
-                        <span className="text-xs text-muted-foreground">Page {c.id}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-medium">{c.name}</span>
+                          {c.domain && (
+                            <span className="text-xs text-muted-foreground">{c.domain}</span>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-0.5 shrink-0 ml-4">
+                          {c.ad_count != null && (
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              c.ad_count >= 10 ? 'bg-green-500/15 text-green-400' :
+                              c.ad_count >= 1  ? 'bg-amber-500/15 text-amber-400' :
+                                                 'bg-muted text-muted-foreground'
+                            }`}>
+                              {c.ad_count} ads / 90d
+                            </span>
+                          )}
+                          <span className="text-xs text-muted-foreground">ID {c.id}</span>
+                        </div>
                       </button>
                     ))}
                   </div>

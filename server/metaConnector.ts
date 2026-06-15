@@ -120,6 +120,10 @@ export interface BrandAdSnapshot {
 export interface MetaPageResult {
   id: string;
   name: string;
+  /** Primary domain seen in this page's ads (e.g. "hema.nl") — helps distinguish pages with the same name. */
+  domain?: string;
+  /** Number of ads found in the last 90 days — higher = more active advertiser. */
+  ad_count?: number;
 }
 
 // ─── Library deep links (for manual confirmation, no token needed) ─────────────
@@ -190,7 +194,7 @@ export async function searchMetaPages(query: string, limit = 5): Promise<MetaPag
         ad_active_status: "ALL",
         ad_delivery_date_min: isoDate(start),
         ad_delivery_date_max: isoDate(today),
-        fields: "page_id,page_name",
+        fields: "page_id,page_name,ad_creative_link_captions",
         limit: "50",
       });
       const res = await fetch(`${META_BASE_URL}/ads_archive?${params.toString()}`, {
@@ -199,8 +203,20 @@ export async function searchMetaPages(query: string, limit = 5): Promise<MetaPag
       if (!res.ok) continue;
       const data: { data?: Array<{ page_id?: string; page_name?: string }> } = await res.json();
       for (const ad of data.data ?? []) {
-        if (ad.page_id && ad.page_name && !pageMap.has(ad.page_id)) {
-          pageMap.set(ad.page_id, { id: ad.page_id, name: ad.page_name });
+        if (!ad.page_id || !ad.page_name) continue;
+        const existing = pageMap.get(ad.page_id);
+        // Extract domain from ad_creative_link_captions (e.g. "hema.nl", "www.hema.nl")
+        const rawCaption = (ad as MetaAdRecord & { ad_creative_link_captions?: string[] })
+          .ad_creative_link_captions?.[0];
+        const domain = rawCaption
+          ? rawCaption.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase()
+          : undefined;
+        if (!existing) {
+          pageMap.set(ad.page_id, { id: ad.page_id, name: ad.page_name, domain, ad_count: 1 });
+        } else {
+          // Increment ad count; keep first domain seen
+          existing.ad_count = (existing.ad_count ?? 0) + 1;
+          if (!existing.domain && domain) existing.domain = domain;
         }
       }
     } catch {
