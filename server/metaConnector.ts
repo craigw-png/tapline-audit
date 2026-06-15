@@ -179,7 +179,10 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
 
   const words = query.trim().split(/\s+/).filter(Boolean);
   const variations = Array.from(
-    new Set([query.trim(), words.slice(0, 2).join(" "), words[0]].filter((v) => v && v.length >= 2))
+    new Set(
+      [query.trim(), words.length > 2 ? words.slice(0, 2).join(" ") : null]
+        .filter((v): v is string => !!v && v.length >= 2)
+    )
   );
 
   const pageMap = new Map<string, MetaPageResult>();
@@ -222,17 +225,23 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     } catch {
       // ignore and try next variation
     }
-  }
+  const q = query.toLowerCase().trim();
 
-  const q = query.toLowerCase();
+  const queryWords = q.split(/\s+/).filter((w) => w.length >= 4);
+  const nameMatches = (name: string): boolean => {
+    const n = name.toLowerCase();
+    if (n.includes(q)) return true;
+    if (queryWords.length > 0 && queryWords.some((w) => n.includes(w))) return true;
+    return false;
+  };
+
   return Array.from(pageMap.values())
+    .filter((p) => nameMatches(p.name))
     .sort((a, b) => {
-      // Primary: exact name match floats to top
-      const aExact = a.name.toLowerCase() === q ? 1 : 0;
-      const bExact = b.name.toLowerCase() === q ? 1 : 0;
-      if (bExact !== aExact) return bExact - aExact;
-      // Secondary: sort by ad count descending (most active advertiser first)
-      return (b.ad_count ?? 0) - (a.ad_count ?? 0);
+      const aL = a.name.toLowerCase();
+      const bL = b.name.toLowerCase();
+      const score = (n: string) => (n === q ? 2 : n.startsWith(q) ? 1 : 0);
+      return score(bL) - score(aL);
     })
     .slice(0, limit);
 }
