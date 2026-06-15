@@ -113,26 +113,34 @@ export default function Home() {
   }
 
   async function runLive(metaPageId: string) {
-    const r = await createAudit.mutateAsync({
-      brandName: brandName.trim(),
-      metaPageId,
-      countryCode: country,
-      days: Number(days),
-    });
-    applyResult(r);
+    try {
+      const r = await createAudit.mutateAsync({
+        brandName: brandName.trim(),
+        metaPageId,
+        countryCode: country,
+        days: Number(days),
+      });
+      applyResult(r);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Audit failed — please try again.");
+    }
   }
 
   async function runManual() {
     const total = Number(manualTotal);
     const partner = Number(manualPartner);
     if (!Number.isFinite(total) || total < 0) return;
-    const r = await createAudit.mutateAsync({
-      brandName: brandName.trim(),
-      countryCode: country,
-      days: Number(days),
-      manual: { totalAds: total, partnershipAds: Number.isFinite(partner) ? partner : 0 },
-    });
-    applyResult(r);
+    try {
+      const r = await createAudit.mutateAsync({
+        brandName: brandName.trim(),
+        countryCode: country,
+        days: Number(days),
+        manual: { totalAds: total, partnershipAds: Number.isFinite(partner) ? partner : 0 },
+      });
+      applyResult(r);
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Audit failed — please try again.");
+    }
   }
 
   async function confirm() {
