@@ -227,9 +227,12 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
   const q = query.toLowerCase();
   return Array.from(pageMap.values())
     .sort((a, b) => {
+      // Primary: exact name match floats to top
       const aExact = a.name.toLowerCase() === q ? 1 : 0;
       const bExact = b.name.toLowerCase() === q ? 1 : 0;
-      return bExact - aExact;
+      if (bExact !== aExact) return bExact - aExact;
+      // Secondary: sort by ad count descending (most active advertiser first)
+      return (b.ad_count ?? 0) - (a.ad_count ?? 0);
     })
     .slice(0, limit);
 }

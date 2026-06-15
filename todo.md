@@ -121,3 +121,11 @@
 - [x] Hide TikTok demo data from header stats and platform breakdown (show only when TikTok is live)
 - [x] Make Meta Ads + Meta Partnership Ads the dominant hero numbers on the Overview (Meta-only label when TikTok is mock)
 - [x] Remove mock creator handle fallback — show honest empty state instead
+
+## Phase 13: UX Improvements
+- [x] Add "View in Meta Ads Library" link on each candidate card (opens view_all_page_id URL)
+- [x] Sort candidates by ad count descending (most active advertiser floats to top)
+- [x] Add token expiry warning banner (shows when META_ACCESS_TOKEN is within 14 days of expiry)
+- [x] Add quick-search suggestions on home page (Ninja Kitchen, HEMA, Dreame, Emma Sleep)
+- [x] Add "Re-run Audit" button on audit results page
+- [x] Add "View in Meta Ads Library" links on individual partnership ads in review list

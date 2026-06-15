@@ -63,6 +63,32 @@ export const appRouter = router({
     }),
   }),
 
+  // ─── System / token health ─────────────────────────────────────────────────
+  meta: router({
+    /** Returns token expiry info so the UI can show a warning banner. */
+    tokenStatus: protectedProcedure.query(async () => {
+      const token = process.env.META_ACCESS_TOKEN;
+      if (!token) return { configured: false, expiresAt: null, daysLeft: null };
+
+      try {
+        const params = new URLSearchParams({ input_token: token, access_token: token });
+        const res = await fetch(
+          `https://graph.facebook.com/v21.0/debug_token?${params.toString()}`,
+          { signal: AbortSignal.timeout(8000) }
+        );
+        if (!res.ok) return { configured: true, expiresAt: null, daysLeft: null };
+        const body = await res.json() as { data?: { is_valid?: boolean; expires_at?: number } };
+        const expiresAt = body.data?.expires_at ?? null;
+        const daysLeft = expiresAt
+          ? Math.floor((expiresAt * 1000 - Date.now()) / (1000 * 60 * 60 * 24))
+          : null;
+        return { configured: true, expiresAt, daysLeft, isValid: body.data?.is_valid ?? false };
+      } catch {
+        return { configured: true, expiresAt: null, daysLeft: null };
+      }
+    }),
+  }),
+
   // ─── Brand ───────────────────────────────────────────────────────────────────
   brand: router({
     /** Find candidate Meta Pages for a brand name so the user can confirm the right one. */
