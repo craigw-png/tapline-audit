@@ -225,6 +225,7 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     } catch {
       // ignore and try next variation
     }
+  }                                        // ← add this line (closes the for loop)
   const q = query.toLowerCase().trim();
 
   const queryWords = q.split(/\s+/).filter((w) => w.length >= 4);
