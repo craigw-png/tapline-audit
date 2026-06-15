@@ -6,18 +6,12 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import AuditPage from "./pages/AuditPage";
-import SharePage from "./pages/SharePage";
-import NewAuditPage from "./pages/NewAuditPage";
-import AccountAccessPage from "./pages/AccountAccessPage";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
-      <Route path="/audit/new" component={NewAuditPage} />
       <Route path="/audit/:id" component={AuditPage} />
-      <Route path="/share/:shareId" component={SharePage} />
-      <Route path="/account-access" component={AccountAccessPage} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

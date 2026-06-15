@@ -1,306 +1,360 @@
-import { useState, useRef, useEffect } from "react";
-import { useLocation } from "wouter";
+import { useState } from "react";
+import { Link } from "wouter";
+import type { inferRouterOutputs } from "@trpc/server";
+import type { AppRouter } from "../../../server/routers";
 import { trpc } from "@/lib/trpc";
-import { Search, ArrowRight, Clock, TrendingUp, Zap, BarChart3, Users, FileText } from "lucide-react";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { PARTNERSHIP_BENCHMARK_PCT } from "@shared/const";
+import { ResultCard, type AuditCardData } from "@/components/ResultCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { formatDistanceToNow } from "date-fns";
-import type { Audit } from "@/types/audit";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-function AndromedaRing({ score, size = 48 }: { score: number; size?: number }) {
-  const radius = (size - 8) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
-  const color =
-    score >= 70 ? "oklch(0.75 0.16 155)" : score >= 50 ? "oklch(0.78 0.16 75)" : "oklch(0.62 0.22 25)";
+type Outputs = inferRouterOutputs<AppRouter>;
+type CreateResult = Outputs["audit"]["create"];
+type Candidate = Outputs["brand"]["resolveCandidates"]["candidates"][number];
 
-  return (
-    <svg width={size} height={size} className="rotate-[-90deg]">
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="oklch(0.22 0.015 264)" strokeWidth={4} />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={color}
-        strokeWidth={4}
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        strokeLinecap="round"
-        className="score-ring"
-      />
-    </svg>
-  );
-}
+type Phase = "input" | "candidates" | "result";
 
-function RecentAuditCard({ audit }: { audit: Audit }) {
-  const [, navigate] = useLocation();
-  const score = audit.andromedaScore ?? 0;
-  const grade =
-    score >= 80 ? "A" : score >= 65 ? "B" : score >= 50 ? "C" : score >= 35 ? "D" : "F";
-  const gradeColor =
-    grade === "A"
-      ? "text-emerald-400"
-      : grade === "B"
-        ? "text-blue-400"
-        : grade === "C"
-          ? "text-amber-400"
-          : "text-red-400";
+const COUNTRIES = [
+  { code: "NL", label: "Netherlands" },
+  { code: "BE", label: "Belgium" },
+  { code: "DE", label: "Germany" },
+  { code: "FR", label: "France" },
+  { code: "GB", label: "United Kingdom" },
+];
 
-  return (
-    <button
-      onClick={() => navigate(`/audit/${audit.id}`)}
-      className="group w-full text-left glass rounded-xl p-4 hover:border-[oklch(0.72_0.18_280/0.5)] transition-all duration-200 hover:shadow-[0_0_20px_oklch(0.72_0.18_280/0.1)]"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-sm text-foreground truncate">{audit.brandName}</span>
-            {audit.usedMockData && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0">
-                Demo
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {formatDistanceToNow(new Date(audit.createdAt), { addSuffix: true })}
-            </span>
-            <span>{audit.period}</span>
-            <span>{audit.totalAds ?? 0} ads</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="relative">
-            <AndromedaRing score={score} size={40} />
-            <span className={`absolute inset-0 flex items-center justify-center text-[10px] font-bold rotate-90 ${gradeColor}`}>
-              {grade}
-            </span>
-          </div>
-          <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-        </div>
-      </div>
-    </button>
-  );
+function toCardData(r: CreateResult, fallbackBrand: string, sourceLabel: string): AuditCardData | null {
+  if (!r.result) return null;
+  return {
+    brandName: r.result.brandName || fallbackBrand,
+    totalAds: r.result.totalAds,
+    partnershipAds: r.result.partnershipAds,
+    partnershipPct: r.result.partnershipPct,
+    partnershipConfirmed: r.result.isConfirmed,
+    sourceLabel,
+  };
 }
 
 export default function Home() {
-  const [query, setQuery] = useState("");
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [, navigate] = useLocation();
-  const inputRef = useRef<HTMLInputElement>(null);
+  useAuth({ redirectOnUnauthenticated: true });
 
-  const { data: recentAudits, isLoading: loadingRecent } = trpc.audit.listRecent.useQuery();
-  const { data: searchData } = trpc.brand.search.useQuery(
-    { query },
-    { enabled: query.length >= 2 }
-  );
+  const utils = trpc.useUtils();
+  const createAudit = trpc.audit.create.useMutation();
+  const confirmCount = trpc.audit.confirmPartnershipCount.useMutation();
 
-  const resolveMutation = trpc.brand.resolve.useMutation();
+  const [phase, setPhase] = useState<Phase>("input");
+  const [brandName, setBrandName] = useState("");
+  const [country, setCountry] = useState("NL");
+  const [days, setDays] = useState("30");
+  const [resolving, setResolving] = useState(false);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const handleSearch = async (brandName: string) => {
-    setShowSuggestions(false);
-    setQuery(brandName);
-    const result = await resolveMutation.mutateAsync({ query: brandName });
-    if (result?.brand) {
-      navigate(`/audit/new?brand=${encodeURIComponent(brandName)}&slug=${result.brand.slug}`);
-    } else {
-      navigate(`/audit/new?brand=${encodeURIComponent(brandName)}&slug=${brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`);
-    }
-  };
+  const [card, setCard] = useState<AuditCardData | null>(null);
+  const [auditId, setAuditId] = useState<number | null>(null);
+  const [reviewAds, setReviewAds] = useState<CreateResult["candidateAds"]>([]);
+  const [libraryUrl, setLibraryUrl] = useState<string | null>(null);
+  const [confirmInput, setConfirmInput] = useState("0");
+  const [manualTotal, setManualTotal] = useState("");
+  const [manualPartner, setManualPartner] = useState("");
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && query.trim().length >= 2) {
-      handleSearch(query.trim());
-    }
-  };
+  const sourceLabel = `Meta \u00b7 ${country} \u00b7 last ${days} days`;
 
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (inputRef.current && !inputRef.current.closest(".search-container")?.contains(e.target as Node)) {
-        setShowSuggestions(false);
+  function reset() {
+    setPhase("input");
+    setCandidates([]);
+    setNotice(null);
+    setCard(null);
+    setAuditId(null);
+    setReviewAds([]);
+    setLibraryUrl(null);
+    setConfirmInput("0");
+    setManualTotal("");
+    setManualPartner("");
+  }
+
+  async function findBrand() {
+    if (!brandName.trim()) return;
+    setResolving(true);
+    setNotice(null);
+    try {
+      const res = await utils.brand.resolveCandidates.fetch({ brandName: brandName.trim() });
+      setCandidates(res.candidates);
+      if (!res.candidates.length) {
+        setNotice(
+          res.hasLiveSearch
+            ? "No Meta Page found for that name. Check the spelling or enter the counts manually below."
+            : "Live search isn't configured (no Meta token). Enter the counts manually below."
+        );
       }
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
+      setPhase("candidates");
+    } finally {
+      setResolving(false);
+    }
+  }
 
-  const suggestions = searchData?.suggestions ?? [];
+  function applyResult(r: CreateResult) {
+    setAuditId(r.audit?.id ?? null);
+    setReviewAds(r.candidateAds ?? []);
+    setLibraryUrl(r.audit?.adLibraryUrl ?? null);
+    const data = toCardData(r, brandName.trim(), sourceLabel);
+    setCard(data);
+    if (data) setConfirmInput(String(data.partnershipAds));
+    if (!data && "message" in r && r.message) setNotice(r.message);
+    setPhase("result");
+  }
+
+  async function runLive(metaPageId: string) {
+    const r = await createAudit.mutateAsync({
+      brandName: brandName.trim(),
+      metaPageId,
+      countryCode: country,
+      days: Number(days),
+    });
+    applyResult(r);
+  }
+
+  async function runManual() {
+    const total = Number(manualTotal);
+    const partner = Number(manualPartner);
+    if (!Number.isFinite(total) || total < 0) return;
+    const r = await createAudit.mutateAsync({
+      brandName: brandName.trim(),
+      countryCode: country,
+      days: Number(days),
+      manual: { totalAds: total, partnershipAds: Number.isFinite(partner) ? partner : 0 },
+    });
+    applyResult(r);
+  }
+
+  async function confirm() {
+    if (auditId == null) return;
+    const cr = await confirmCount.mutateAsync({
+      auditId,
+      confirmedPartnershipAds: Number(confirmInput) || 0,
+    });
+    if (cr.result) {
+      setCard({
+        brandName: cr.result.brandName,
+        totalAds: cr.result.totalAds,
+        partnershipAds: cr.result.partnershipAds,
+        partnershipPct: cr.result.partnershipPct,
+        partnershipConfirmed: true,
+        sourceLabel,
+      });
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-background grid-bg">
-      {/* Header */}
-      <header className="border-b border-border/50 bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex items-center justify-between h-14">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <Zap className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-base tracking-tight">Tapline</span>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 ml-1">
-              Audit
-            </Badge>
-          </div>
-          <nav className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="text-muted-foreground text-xs">
-              Documentation
-            </Button>
-            <Button variant="ghost" size="sm" className="text-muted-foreground text-xs">
-              API Status
-            </Button>
-          </nav>
+    <div className="min-h-screen">
+      <header className="border-b border-border">
+        <div className="container flex h-14 items-center justify-between">
+          <span className="text-sm font-bold uppercase tracking-[0.25em] text-primary">Humanz</span>
+          <span className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Partnership Audit
+          </span>
         </div>
       </header>
 
-      <main className="container py-16 md:py-24">
-        {/* Hero */}
-        <div className="max-w-3xl mx-auto text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[oklch(0.72_0.18_280/0.3)] bg-[oklch(0.72_0.18_280/0.08)] text-xs text-primary mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Powered by the Andromeda Algorithm
-          </div>
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-5">
-            Reveal the{" "}
-            <span className="gradient-text">creator gap</span>
-            <br />
-            in any brand's ad strategy
+      <main className="container py-12">
+        <div className="mx-auto max-w-2xl text-center">
+          <h1 className="text-3xl font-semibold sm:text-4xl">
+            How many of a brand&apos;s ads are{" "}
+            <span className="text-primary">creator partnerships?</span>
           </h1>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Tapline analyses Meta and TikTok ad libraries to score creative diversity, identify
-            partnership opportunities, and benchmark against competitors — in seconds.
+          <p className="mt-4 text-muted-foreground">
+            The benchmark is {PARTNERSHIP_BENCHMARK_PCT}%. Pull any brand&apos;s active Meta ads and
+            see where they land.
           </p>
         </div>
 
-        {/* Search */}
-        <div className="max-w-2xl mx-auto mb-16">
-          <div className="search-container relative">
-            <div className="relative flex items-center">
-              <Search className="absolute left-4 w-5 h-5 text-muted-foreground pointer-events-none" />
+        <div className="mx-auto mt-10 max-w-xl">
+          {phase === "input" && (
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <Label htmlFor="brand">Brand name</Label>
               <Input
-                ref={inputRef}
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setShowSuggestions(e.target.value.length >= 2);
-                }}
-                onKeyDown={handleKeyDown}
-                onFocus={() => query.length >= 2 && setShowSuggestions(true)}
-                placeholder="Search any brand — e.g. Ninja Kitchen, KitchenAid..."
-                className="pl-12 pr-32 h-14 text-base bg-card border-border/70 rounded-xl focus-visible:ring-primary/50 focus-visible:border-primary/50"
+                id="brand"
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                placeholder="e.g. Albert Heijn"
+                className="mt-2"
+                onKeyDown={(e) => e.key === "Enter" && findBrand()}
               />
-              <Button
-                onClick={() => query.trim().length >= 2 && handleSearch(query.trim())}
-                disabled={query.trim().length < 2 || resolveMutation.isPending}
-                className="absolute right-2 h-10 px-5 rounded-lg btn-glow transition-all"
-              >
-                {resolveMutation.isPending ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    Resolving...
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-2">
-                    Audit Brand
-                    <ArrowRight className="w-4 h-4" />
-                  </span>
-                )}
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Market</Label>
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COUNTRIES.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Window</Label>
+                  <Select value={days} onValueChange={setDays}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="30">Last 30 days</SelectItem>
+                      <SelectItem value="60">Last 60 days</SelectItem>
+                      <SelectItem value="90">Last 90 days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <Button className="mt-6 w-full" onClick={findBrand} disabled={resolving || !brandName.trim()}>
+                {resolving ? "Searching\u2026" : "Find brand"}
               </Button>
             </div>
+          )}
 
-            {/* Suggestions dropdown */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="absolute top-full left-0 right-0 mt-2 glass rounded-xl border border-border overflow-hidden z-50 shadow-2xl">
-                {suggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleSearch(s.name)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors text-left"
-                  >
-                    <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div>
-                      <div className="text-sm font-medium">{s.name}</div>
-                      {s.industry && (
-                        <div className="text-xs text-muted-foreground">{s.industry}</div>
-                      )}
+          {phase === "candidates" && (
+            <div className="rounded-2xl border border-border bg-card p-6">
+              <button onClick={reset} className="text-sm text-muted-foreground hover:text-foreground">{"\u2190 Start over"}</button>
+
+              {candidates.length > 0 && (
+                <div className="mt-4">
+                  <h3 className="text-sm font-medium">Which Meta Page is this brand?</h3>
+                  <div className="mt-3 space-y-2">
+                    {candidates.map((c) => (
+                      <button
+                        key={c.id}
+                        onClick={() => runLive(c.id)}
+                        disabled={createAudit.isPending}
+                        className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-left transition hover:border-primary disabled:opacity-50"
+                      >
+                        <span className="font-medium">{c.name}</span>
+                        <span className="text-xs text-muted-foreground">Page {c.id}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {notice && <p className="mt-4 text-sm text-muted-foreground">{notice}</p>}
+
+              <div className="mt-6 border-t border-border pt-5">
+                <h3 className="text-sm font-medium">Or enter counts manually</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Read these off the Meta Ad Library, then confirm here.
+                </p>
+                <div className="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="mt">Total active ads</Label>
+                    <Input id="mt" inputMode="numeric" value={manualTotal} onChange={(e) => setManualTotal(e.target.value)} className="mt-2" />
+                  </div>
+                  <div>
+                    <Label htmlFor="mp">Partnership ads</Label>
+                    <Input id="mp" inputMode="numeric" value={manualPartner} onChange={(e) => setManualPartner(e.target.value)} className="mt-2" />
+                  </div>
+                </div>
+                <Button
+                  variant="secondary"
+                  className="mt-4 w-full"
+                  onClick={runManual}
+                  disabled={createAudit.isPending || !manualTotal}
+                >
+                  {createAudit.isPending ? "Running\u2026" : "Run manual audit"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {phase === "result" && (
+            <div className="flex flex-col items-center gap-6">
+              {card ? (
+                <ResultCard data={card} />
+              ) : (
+                <div className="w-full rounded-2xl border border-border bg-card p-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {notice ?? "Couldn't pull live data for this brand."}
+                  </p>
+                  {libraryUrl && (
+                    <a href={libraryUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-primary hover:underline">
+                      Open the Ad Library {"\u2192"}
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {card && !card.partnershipConfirmed && (
+                <div className="w-full max-w-[600px] rounded-2xl border border-border bg-card p-6">
+                  <h3 className="text-sm font-medium">Confirm the partnership count</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {reviewAds.length} candidate{reviewAds.length === 1 ? "" : "s"} flagged by keyword.
+                    Open each, check for the Paid Partnership label, then set the confirmed number.
+                  </p>
+
+                  {reviewAds.length > 0 && (
+                    <div className="mt-3 max-h-44 space-y-1 overflow-y-auto">
+                      {reviewAds.map((a) => (
+                        <a
+                          key={a.id}
+                          href={a.snapshotUrl ?? libraryUrl ?? "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block truncate rounded border border-border px-3 py-2 text-xs text-muted-foreground hover:border-primary hover:text-foreground"
+                        >
+                          {a.excerpt || a.id}
+                        </a>
+                      ))}
                     </div>
-                  </button>
-                ))}
+                  )}
+
+                  {libraryUrl && (
+                    <a href={libraryUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs text-primary hover:underline">
+                      Open full Ad Library {"\u2192"}
+                    </a>
+                  )}
+
+                  <div className="mt-4 flex items-end gap-3">
+                    <div className="flex-1">
+                      <Label htmlFor="confirm">Confirmed partnership ads</Label>
+                      <Input
+                        id="confirm"
+                        inputMode="numeric"
+                        value={confirmInput}
+                        onChange={(e) => setConfirmInput(e.target.value)}
+                        className="mt-2"
+                      />
+                    </div>
+                    <Button onClick={confirm} disabled={confirmCount.isPending}>
+                      {confirmCount.isPending ? "Saving\u2026" : "Confirm"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-4">
+                <Button variant="outline" onClick={reset}>
+                  Run another
+                </Button>
+                {auditId != null && (
+                  <Link href={`/audit/${auditId}`} className="text-sm text-muted-foreground hover:text-foreground">
+                    Open saved audit {"\u2192"}
+                  </Link>
+                )}
               </div>
-            )}
-          </div>
-
-          <p className="text-center text-xs text-muted-foreground mt-3">
-            Try: <button onClick={() => handleSearch("Ninja Kitchen")} className="text-primary hover:underline">Ninja Kitchen UK</button>
-            {" · "}
-            <button onClick={() => handleSearch("KitchenAid")} className="text-primary hover:underline">KitchenAid UK</button>
-            {" · "}
-            <button onClick={() => handleSearch("Sage Appliances")} className="text-primary hover:underline">Sage Appliances</button>
-          </p>
-        </div>
-
-        {/* Feature pills */}
-        <div className="flex flex-wrap justify-center gap-3 mb-20">
-          {[
-            { icon: BarChart3, label: "Meta Ads Analysis" },
-            { icon: TrendingUp, label: "TikTok Ad Data" },
-            { icon: Zap, label: "Andromeda Score" },
-            { icon: Users, label: "Creator Gap Analysis" },
-            { icon: FileText, label: "PDF Pitch Reports" },
-          ].map(({ icon: Icon, label }) => (
-            <div
-              key={label}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-border/60 bg-card/50 text-xs text-muted-foreground"
-            >
-              <Icon className="w-3.5 h-3.5 text-primary" />
-              {label}
-            </div>
-          ))}
-        </div>
-
-        {/* Recent Audits */}
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-lg font-semibold">Recent Audits</h2>
-            <span className="text-xs text-muted-foreground">
-              {recentAudits?.length ?? 0} completed
-            </span>
-          </div>
-
-          {loadingRecent ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className="h-20 rounded-xl" />
-              ))}
-            </div>
-          ) : recentAudits && recentAudits.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recentAudits.map((audit) => (
-                <RecentAuditCard key={audit.id} audit={audit as Audit} />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-16 glass rounded-2xl">
-              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                <Search className="w-6 h-6 text-muted-foreground" />
-              </div>
-              <p className="text-muted-foreground text-sm">
-                No audits yet. Search for a brand above to get started.
-              </p>
             </div>
           )}
         </div>
       </main>
-
-      {/* Footer */}
-      <footer className="border-t border-border/50 mt-20">
-        <div className="container py-6 flex items-center justify-between text-xs text-muted-foreground">
-          <span>© 2026 Tapline. All rights reserved.</span>
-          <span>Powered by the Andromeda Algorithm</span>
-        </div>
-      </footer>
     </div>
   );
 }

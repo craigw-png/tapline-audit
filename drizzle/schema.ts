@@ -125,6 +125,17 @@ export const audits = mysqlTable("audits", {
   metaIsMock: boolean("metaIsMock").default(true),
   /** Whether TikTok Ad Library data is mock (true) or live from the API (false) */
   tiktokIsMock: boolean("tiktokIsMock").default(true),
+
+  // ─── Humanz Partnership Audit (v1) ──────────────────────────────────────────
+  /** True once a human has confirmed the partnership count from the visible labels. Gate reporting on this. */
+  partnershipConfirmed: boolean("partnershipConfirmed").default(false),
+  /** Ads the heuristic flagged as partnership candidates, for human review. */
+  candidateAds: json("candidateAds").$type<Array<{ id: string; snapshotUrl?: string; excerpt: string }>>(),
+  /** Deep link to this page's Ad Library view (for manual confirmation). */
+  adLibraryUrl: varchar("adLibraryUrl", { length: 512 }),
+  /** Deep link to the brand's branded-content (Paid Partnership) view. */
+  brandedContentUrl: varchar("brandedContentUrl", { length: 512 }),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
