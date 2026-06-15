@@ -178,6 +178,9 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
   start.setDate(start.getDate() - 90);
 
   const words = query.trim().split(/\s+/).filter(Boolean);
+  // Only search the full phrase (and a 2-word prefix for long names).
+  // Single-word variations are deliberately excluded: "Emma" alone matches
+  // thousands of unrelated pages and buries the real advertiser.
   const variations = Array.from(
     new Set(
       [query.trim(), words.length > 2 ? words.slice(0, 2).join(" ") : null]
@@ -225,9 +228,16 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     } catch {
       // ignore and try next variation
     }
-  }                                        // ← add this line (closes the for loop)
+  }
+
   const q = query.toLowerCase().trim();
 
+  // Filter: only keep pages whose name has meaningful overlap with the query.
+  // search_terms matches ad *content*, not advertiser names, so the raw results
+  // can include completely unrelated pages. We require that either:
+  //   (a) the page name contains the full query, OR
+  //   (b) the page name contains at least one significant word (4+ chars) from the query.
+  // This eliminates false positives like drama-streaming apps when searching "Emma Sleep".
   const queryWords = q.split(/\s+/).filter((w) => w.length >= 4);
   const nameMatches = (name: string): boolean => {
     const n = name.toLowerCase();
@@ -241,6 +251,7 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     .sort((a, b) => {
       const aL = a.name.toLowerCase();
       const bL = b.name.toLowerCase();
+      // Exact match first, then starts-with, then contains
       const score = (n: string) => (n === q ? 2 : n.startsWith(q) ? 1 : 0);
       return score(bL) - score(aL);
     })
