@@ -249,34 +249,19 @@ export default function Home() {
               />
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="country-input">Market</Label>
-                  <div className="relative mt-2">
-                    <Input
-                      id="country-input"
-                      list="country-list"
-                      value={country}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        // If user typed a known country name, convert to ISO code
-                        const match = ALL_COUNTRIES.find(
-                          (c) => c.label.toLowerCase() === val.toLowerCase()
-                        );
-                        setCountry(match ? match.code : val.toUpperCase().slice(0, 2) || val);
-                      }}
-                      onBlur={(e) => {
-                        const val = e.target.value.trim();
-                        if (val) setCountry(resolveCountryCode(val));
-                      }}
-                      placeholder="NL, GB, DE…"
-                      className="uppercase"
-                      maxLength={2}
-                    />
-                    <datalist id="country-list">
+                  <Label>Market</Label>
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger className="mt-2">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-64 overflow-y-auto">
                       {ALL_COUNTRIES.map((c) => (
-                        <option key={c.code} value={c.code}>{c.label}</option>
+                        <SelectItem key={c.code} value={c.code}>
+                          {c.label} ({c.code})
+                        </SelectItem>
                       ))}
-                    </datalist>
-                  </div>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>Window</Label>
