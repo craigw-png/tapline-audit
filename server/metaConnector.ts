@@ -92,6 +92,8 @@ export interface MetaAdRecord {
   ad_snapshot_url?: string;
   media_type?: "IMAGE" | "VIDEO" | "MEME" | "NONE";
   publisher_platforms?: string[];
+  /** Non-empty when Meta has registered a Paid Partnership label on this ad (the creator's name). */
+  byline?: string;
 }
 
 export interface FlaggedAd {
@@ -310,6 +312,7 @@ export async function fetchBrandAdSnapshot(params: {
         "ad_snapshot_url",
         "media_type",
         "publisher_platforms",
+        "byline",
       ].join(","),
       limit: "250",
     }).toString()}`;
@@ -341,11 +344,17 @@ export async function fetchBrandAdSnapshot(params: {
       const captions = ad.ad_creative_link_captions ?? [];
       const texts = [...bodies, ...titles, ...captions];
 
-      if (isCandidatePartnership(texts)) {
+      // byline is set by Meta when the ad carries an official Paid Partnership label
+      // (e.g. "Emma Sleep with Frederique van Sprang" → byline = "Frederique van Sprang").
+      // This is a definitive signal — not a heuristic — so we always flag it as a candidate.
+      const hasByline = !!ad.byline?.trim();
+      if (hasByline || isCandidatePartnership(texts)) {
         candidateAds.push({
           id: ad.id,
           snapshotUrl: ad.ad_snapshot_url,
-          excerpt: (texts.find(Boolean) ?? "").slice(0, 140),
+          excerpt: hasByline
+            ? `Paid Partnership with ${ad.byline}`
+            : (texts.find(Boolean) ?? "").slice(0, 140),
         });
       }
 
