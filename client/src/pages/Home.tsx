@@ -72,12 +72,18 @@ const ALL_COUNTRIES = [
   { code: "MX", label: "Mexico" },
 ];
 
-/** Quick-search suggestions for demo / common brands */
-const QUICK_SEARCHES = [
+/** Quick-search suggestions for demo / common brands.
+ * pageId: when set, bypasses the candidate-search step and runs the audit directly
+ * against the known Meta Page ID (workaround for brands whose ads_archive results
+ * don't surface the page by name, and whose token lacks pages_read_engagement).
+ */
+const QUICK_SEARCHES: Array<{ label: string; country: string; pageId?: string }> = [
   { label: "Ninja Kitchen", country: "GB" },
   { label: "HEMA", country: "NL" },
   { label: "Dreame", country: "NL" },
-  { label: "Emma Sleep", country: "NL" },
+  // Emma Sleep NL page ID 249220112144810 — bypasses search because /pages/search
+  // requires pages_read_engagement and ads_archive doesn't index their ad copy by name.
+  { label: "Emma Sleep", country: "NL", pageId: "249220112144810" },
 ];
 
 function buildCandidateLibraryUrl(pageId: string, countryCode: string): string {
@@ -304,8 +310,17 @@ export default function Home() {
                 {QUICK_SEARCHES.map((s) => (
                   <button
                     key={`${s.label}-${s.country}`}
-                    onClick={() => findBrand(s.label, s.country)}
-                    disabled={resolving}
+                    onClick={() => {
+                      if (s.pageId) {
+                        // Known page ID — skip candidate search, run audit directly
+                        setBrandName(s.label);
+                        setCountry(s.country);
+                        runLive(s.pageId);
+                      } else {
+                        findBrand(s.label, s.country);
+                      }
+                    }}
+                    disabled={resolving || createAudit.isPending}
                     className="rounded-full border border-border px-3 py-1 text-xs text-muted-foreground transition hover:border-primary hover:text-foreground disabled:opacity-50"
                   >
                     {s.label} <span className="opacity-60">{s.country}</span>
