@@ -74,6 +74,21 @@ const PARTNERSHIP_PATTERNS: RegExp[] = [
   /#kooperation\b/i,
   /#unbezahlte_werbung\b/i,
   /#bezahlte_kooperation\b/i,
+  // Polish
+  /\breklama\b/i,
+  /\{reklama\}/i,
+  /\[reklama\]/i,
+  /#reklama\b/i,
+  /\bwspółpraca\b/i,
+  /\bwspolpraca\b/i,
+  /\bpartnerstwo\b/i,
+  /\bwe współpracy z\b/i,
+  /\bwe wspolpracy z\b/i,
+  /#wspolpraca\b/i,
+  /#współpraca\b/i,
+  /#partnerstwo\b/i,
+  /#płatnaWspółpraca\b/i,
+  /#platnaWspolpraca\b/i,
 ];
 
 // ─── Option A: Creator-boosted signals ────────────────────────────────────────
@@ -86,6 +101,8 @@ const CREATOR_BOOST_PATTERNS: RegExp[] = [
   /\bin de bio\b/i,
   /\blink in mijn bio\b/i,
   /\bcode\s+[A-Z0-9]{3,}/,       // discount code like "Code DEDFHMF"
+  /\bkodem\s+[A-Z0-9]{3,}/i,     // Polish: "Z kodem NULA20"
+  /\bz kodem\b/i,                 // Polish: "with code"
   /\buse code\b/i,
   /\bpromo code\b/i,
   /\baffiliate\b/i,
