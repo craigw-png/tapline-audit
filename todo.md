@@ -141,3 +141,13 @@
 - [x] Add "Can't find the right page?" collapsible section on candidate step
 - [x] Allow user to paste a Facebook Page URL or numeric Page ID to bypass search
 - [x] Increase candidate list limit from 5 to 8
+
+## Phase 16: Enhanced Partnership Detection (Option A + B)
+- [x] Option A: Detect brand-boosted creator posts — flag brand's own ads with "link in bio", "in meiner bio", discount codes, affiliate signals as partnership ads
+- [x] Option B: Second search pass — search ads_archive by brand name as search_terms, collect creator-run ads (different page_id) that mention the brand in copy, flag as partnership candidates
+- [x] Deduplicate across both passes (same ad_id may appear in both)
+- [x] Add partnership_source field to flagged ads: "boosted_creator" | "creator_mention" | "byline" | "text_signal"
+- [x] Add German partnership keywords (Werbung, Anzeige, Kooperation) to detection patterns
+- [x] Test with Dreame Deutschland DE — detects 14 partnership candidates (up from 0)
+- [x] Make "View in Ads Library" button larger on candidate cards (labeled button with text)
+- [x] Make "View in Meta Ads Library" link a full-width prominent button in result phase

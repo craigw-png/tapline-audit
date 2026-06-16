@@ -63,7 +63,44 @@ const PARTNERSHIP_PATTERNS: RegExp[] = [
   /\bpublicité\b/i,
   /#partenariat\b/i,
   /#publi\b/i,
+  // German
+  /\bwerbung\b/i,
+  /\banzeige\b/i,
+  /\bkooperation\b/i,
+  /\bin kooperation mit\b/i,
+  /\bin zusammenarbeit mit\b/i,
+  /#werbung\b/i,
+  /#anzeige\b/i,
+  /#kooperation\b/i,
+  /#unbezahlte_werbung\b/i,
+  /#bezahlte_kooperation\b/i,
 ];
+
+// ─── Option A: Creator-boosted signals ────────────────────────────────────────
+// These appear in the BRAND's own ads when they boost a creator's organic post
+// or run an influencer-style campaign from their own page.
+const CREATOR_BOOST_PATTERNS: RegExp[] = [
+  /\blink in bio\b/i,
+  /\bin meiner bio\b/i,
+  /\bin my bio\b/i,
+  /\bin de bio\b/i,
+  /\blink in mijn bio\b/i,
+  /\bcode\s+[A-Z0-9]{3,}/,       // discount code like "Code DEDFHMF"
+  /\buse code\b/i,
+  /\bpromo code\b/i,
+  /\baffiliate\b/i,
+  /\bprovision\b/i,              // German: commission
+  /\bempfehlungslink\b/i,        // German: referral link
+  /\bempfehlungscode\b/i,        // German: referral code
+  /\bswipe up\b/i,
+  /\bcheck my bio\b/i,
+  /\bcheck the link in bio\b/i,
+];
+
+function isBoostedCreatorAd(texts: string[]): boolean {
+  const combined = texts.filter(Boolean).join(" ");
+  return CREATOR_BOOST_PATTERNS.some((re) => re.test(combined));
+}
 
 function isCandidatePartnership(texts: string[]): boolean {
   const combined = texts.filter(Boolean).join(" ");
@@ -86,10 +123,15 @@ export interface MetaAdRecord {
   byline?: string;
 }
 
+export type PartnershipSource = "byline" | "text_signal" | "boosted_creator" | "creator_mention";
+
 export interface FlaggedAd {
   id: string;
   snapshotUrl?: string;
   excerpt: string;
+  partnershipSource?: PartnershipSource;
+  /** For creator_mention ads: the creator's page name */
+  creatorPageName?: string;
 }
 
 export interface BrandAdSnapshot {
@@ -251,6 +293,7 @@ export async function fetchBrandAdSnapshot(params: {
   const periodLabel = `the last ${days} days`;
 
   try {
+    // ── Pass 1: Brand's own ads (search_page_ids) ──────────────────────────────
     const allAds: MetaAdRecord[] = [];
     let nextUrl: string | null = `${META_BASE_URL}/ads_archive?${new URLSearchParams({
       access_token: token,
@@ -277,8 +320,8 @@ export async function fetchBrandAdSnapshot(params: {
       limit: "250",
     }).toString()}`;
 
-    let pages = 0;
-    while (nextUrl && pages < 8) {
+    let pageCount = 0;
+    while (nextUrl && pageCount < 8) {
       const res: Response = await fetch(nextUrl, { signal: AbortSignal.timeout(20000) });
       if (!res.ok) {
         const body: { error?: { code?: number; message?: string } } = await res
@@ -291,13 +334,64 @@ export async function fetchBrandAdSnapshot(params: {
       const batch = data.data ?? [];
       allAds.push(...batch);
       nextUrl = data.paging?.next ?? null;
-      pages++;
+      pageCount++;
       if (batch.length < 250) break;
     }
 
+    const pageName = allAds[0]?.page_name ?? "";
+
+    // ── Pass 2 (Option B): Creator-run ads mentioning the brand ────────────────
+    // Search ads_archive by brand name as search_terms. Collect ads from OTHER
+    // pages (creator pages) that mention the brand in their copy. These are
+    // creator-run partnership ads that don't appear under the brand's page_id.
+    const brandNameForSearch = pageName || params.pageId;
+    const creatorMentionAds: MetaAdRecord[] = [];
+    if (brandNameForSearch) {
+      // Use the first word of the brand name as the search term (more results)
+      const searchWord = brandNameForSearch.split(/\s+/)[0];
+      try {
+        const creatorParams = new URLSearchParams({
+          access_token: token,
+          search_terms: searchWord,
+          ad_reached_countries: `["${countryCode}"]`,
+          ad_active_status: "ALL",
+          ad_delivery_date_min: isoDate(start),
+          ad_delivery_date_max: isoDate(today),
+          fields: [
+            "id",
+            "page_id",
+            "page_name",
+            "ad_creative_bodies",
+            "ad_creative_link_titles",
+            "ad_creative_link_captions",
+            "ad_snapshot_url",
+            "byline",
+          ].join(","),
+          limit: "100",
+        });
+        const creatorRes = await fetch(`${META_BASE_URL}/ads_archive?${creatorParams.toString()}`, {
+          signal: AbortSignal.timeout(15000),
+        });
+        if (creatorRes.ok) {
+          const creatorData: { data?: MetaAdRecord[] } = await creatorRes.json();
+          for (const ad of creatorData.data ?? []) {
+            // Only include ads from OTHER pages (not the brand's own page)
+            if (ad.page_id && ad.page_id !== params.pageId) {
+              creatorMentionAds.push(ad);
+            }
+          }
+        }
+      } catch {
+        // Option B is best-effort — don't fail the whole audit
+      }
+    }
+
+    // ── Classify and deduplicate ───────────────────────────────────────────────
+    const seenIds = new Set<string>();
     const formatBreakdown = { video: 0, image: 0, carousel: 0, collection: 0 };
     const candidateAds: FlaggedAd[] = [];
 
+    // Pass 1: brand's own ads
     for (const ad of allAds) {
       const bodies = ad.ad_creative_bodies ?? [];
       const titles = ad.ad_creative_link_titles ?? [];
@@ -306,14 +400,20 @@ export async function fetchBrandAdSnapshot(params: {
 
       // byline is the official Paid Partnership signal from Meta.
       const hasByline = !!ad.byline?.trim();
-      if (hasByline || isCandidatePartnership(texts)) {
-        candidateAds.push({
-          id: ad.id,
-          snapshotUrl: ad.ad_snapshot_url,
-          excerpt: hasByline
-            ? `Paid Partnership with ${ad.byline}`
-            : (texts.find(Boolean) ?? "").slice(0, 140),
-        });
+      const hasTextSignal = isCandidatePartnership(texts);
+      const hasBoostedSignal = isBoostedCreatorAd(texts);
+
+      if (hasByline || hasTextSignal || hasBoostedSignal) {
+        seenIds.add(ad.id);
+        const source: PartnershipSource = hasByline
+          ? "byline"
+          : hasTextSignal
+          ? "text_signal"
+          : "boosted_creator";
+        const excerpt = hasByline
+          ? `Paid Partnership with ${ad.byline}`
+          : (texts.find(Boolean) ?? "").slice(0, 140);
+        candidateAds.push({ id: ad.id, snapshotUrl: ad.ad_snapshot_url, excerpt, partnershipSource: source });
       }
 
       if (bodies.length > 4 || captions.length > 4) formatBreakdown.collection++;
@@ -321,6 +421,36 @@ export async function fetchBrandAdSnapshot(params: {
       else if (ad.media_type === "VIDEO") formatBreakdown.video++;
       else if (ad.media_type === "IMAGE" || ad.media_type === "MEME") formatBreakdown.image++;
       else formatBreakdown.video++;
+    }
+
+    // Pass 2: creator-run ads mentioning the brand (Option B)
+    for (const ad of creatorMentionAds) {
+      if (seenIds.has(ad.id)) continue; // already flagged
+      const bodies = ad.ad_creative_bodies ?? [];
+      const titles = ad.ad_creative_link_titles ?? [];
+      const captions = ad.ad_creative_link_captions ?? [];
+      const texts = [...bodies, ...titles, ...captions];
+
+      // For creator-run ads, require at least one partnership signal OR a boosted signal
+      // to avoid false positives from drama apps that happen to mention the brand name.
+      const hasByline = !!ad.byline?.trim();
+      const hasTextSignal = isCandidatePartnership(texts);
+      const hasBoostedSignal = isBoostedCreatorAd(texts);
+
+      if (hasByline || hasTextSignal || hasBoostedSignal) {
+        seenIds.add(ad.id);
+        const source: PartnershipSource = hasByline ? "byline" : hasTextSignal ? "text_signal" : "creator_mention";
+        const excerpt = hasByline
+          ? `Paid Partnership with ${ad.byline}`
+          : (texts.find(Boolean) ?? "").slice(0, 140);
+        candidateAds.push({
+          id: ad.id,
+          snapshotUrl: ad.ad_snapshot_url,
+          excerpt,
+          partnershipSource: source,
+          creatorPageName: ad.page_name,
+        });
+      }
     }
 
     return {
@@ -332,7 +462,7 @@ export async function fetchBrandAdSnapshot(params: {
       candidateAds,
       formatBreakdown,
       adLibraryUrl: buildAdLibraryUrl(params.pageId, countryCode),
-      brandedContentUrl: buildBrandedContentUrl(allAds[0]?.page_name ?? "", countryCode),
+      brandedContentUrl: buildBrandedContentUrl(pageName, countryCode),
     };
   } catch (error) {
     console.warn("[Meta] fetchBrandAdSnapshot failed:", error);

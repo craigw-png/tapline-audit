@@ -435,11 +435,11 @@ export default function Home() {
                           href={buildCandidateLibraryUrl(c.id, country)}
                           target="_blank"
                           rel="noreferrer"
-                          title="View in Meta Ads Library"
                           onClick={(e) => e.stopPropagation()}
-                          className="flex items-center justify-center rounded-lg border border-border px-3 text-muted-foreground transition hover:border-primary hover:text-foreground"
+                          className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition hover:border-primary hover:text-foreground whitespace-nowrap"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                          View in Ads Library
                         </a>
                       </div>
                     ))}
@@ -535,8 +535,14 @@ export default function Home() {
                     {notice ?? "Couldn't pull live data for this brand."}
                   </p>
                   {libraryUrl && (
-                    <a href={libraryUrl} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-primary hover:underline">
-                      Open the Ad Library {"\u2192"}
+                    <a
+                      href={libraryUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/10"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View in Meta Ads Library
                     </a>
                   )}
                 </div>
@@ -567,9 +573,14 @@ export default function Home() {
                   )}
 
                   {libraryUrl && (
-                    <a href={libraryUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-1 text-xs text-primary hover:underline">
-                      <ExternalLink className="h-3 w-3" />
-                      Open full Ad Library
+                    <a
+                      href={libraryUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-4 py-2.5 text-sm font-medium text-primary transition hover:bg-primary/10"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      View in Meta Ads Library
                     </a>
                   )}
 
