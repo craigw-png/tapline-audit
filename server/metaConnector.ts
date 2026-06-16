@@ -29,11 +29,10 @@ const META_GRAPH_VERSION = "v21.0";
 const META_BASE_URL = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 const PUBLIC_LIBRARY_BASE = "https://www.facebook.com/ads/library";
 
-// ─── Partnership candidate detection ──────────────────────────────────────────
+// ─── Partnership candidate detection ──────────────────────────────────────────────
 // Word-boundary matching (fixes the old substring bug where "#ad" matched inside
 // "#additional" and "ambassador" matched anywhere). These flag CANDIDATES only.
 const PARTNERSHIP_PATTERNS: RegExp[] = [
-  // English — explicit paid partnership labels
   /\bpaid partnership\b/i,
   /\bpaid collaboration\b/i,
   /\bin collaboration with\b/i,
@@ -41,34 +40,27 @@ const PARTNERSHIP_PATTERNS: RegExp[] = [
   /\bsponsored by\b/i,
   /\bcreator partner\b/i,
   /\bbrand ambassador\b/i,
-  // English hashtags
   /#ad\b/i,
   /#paidpartnership\b/i,
   /#sponsored\b/i,
   /#gifted\b/i,
   /#brandpartner\b/i,
   /#ambassador\b/i,
-  // Dutch — "AD |" or "AD l" pipe/bar format (e.g. "AD | Ik maakte..." or "AD l new coffee...")
-  // Must be at start of text or after whitespace to avoid matching "ad" inside words
   /(?:^|\s)AD\s*[|l]/,
-  // Dutch — "advertentie ||" or "|| advertentie" (pipe-wrapped)
   /advertentie/i,
   /\|\|\s*advertentie/i,
   /advertentie\s*\|\|/i,
-  // Dutch — collaboration / partnership phrases
   /\bsamenwerking\b/i,
   /\bin samenwerking met\b/i,
   /\bbetaalde samenwerking\b/i,
   /\bin opdracht van\b/i,
-  // Dutch hashtags
   /#reclame\b/i,
   /#samenwerking\b/i,
   /#betaaldesamenwerking\b/i,
   /#gifted\b/i,
-  // French (BE/FR market)
   /\bpartenariat\b/i,
   /\ben partenariat avec\b/i,
-  /\bpublicit\u00e9\b/i,
+  /\bpublicité\b/i,
   /#partenariat\b/i,
   /#publi\b/i,
 ];
@@ -77,8 +69,6 @@ function isCandidatePartnership(texts: string[]): boolean {
   const combined = texts.filter(Boolean).join(" ");
   return PARTNERSHIP_PATTERNS.some((re) => re.test(combined));
 }
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface MetaAdRecord {
   id: string;
@@ -99,7 +89,6 @@ export interface MetaAdRecord {
 export interface FlaggedAd {
   id: string;
   snapshotUrl?: string;
-  /** One-line excerpt of the matched creative text, for the human confirming the count. */
   excerpt: string;
 }
 
@@ -108,27 +97,19 @@ export interface BrandAdSnapshot {
   countryCode: string;
   periodLabel: string;
   totalAds: number;
-  /** Heuristic — must be confirmed by a human before it is reported. */
   candidatePartnershipAds: number;
-  /** The flagged ads so a reviewer can open each and confirm/deny the label. */
   candidateAds: FlaggedAd[];
   formatBreakdown: { video: number; image: number; carousel: number; collection: number };
-  /** Deep link a reviewer opens to see this page's ads with their labels. */
   adLibraryUrl: string;
-  /** Deep link to the page's branded-content (Paid Partnership) view. */
   brandedContentUrl: string;
 }
 
 export interface MetaPageResult {
   id: string;
   name: string;
-  /** Primary domain seen in this page's ads (e.g. "hema.nl") — helps distinguish pages with the same name. */
   domain?: string;
-  /** Number of ads found in the last 90 days — higher = more active advertiser. */
   ad_count?: number;
 }
-
-// ─── Library deep links (for manual confirmation, no token needed) ─────────────
 
 export function buildAdLibraryUrl(pageId: string, countryCode = "NL"): string {
   const params = new URLSearchParams({
@@ -143,8 +124,6 @@ export function buildAdLibraryUrl(pageId: string, countryCode = "NL"): string {
 }
 
 export function buildBrandedContentUrl(brandName: string, countryCode = "NL"): string {
-  // The native library exposes branded content ("Paid Partnership") in a separate
-  // section; a name search filtered to branded content is the reliable human path.
   const params = new URLSearchParams({
     active_status: "active",
     ad_type: "branded_content",
@@ -156,21 +135,12 @@ export function buildBrandedContentUrl(brandName: string, countryCode = "NL"): s
   return `${PUBLIC_LIBRARY_BASE}/?${params.toString()}`;
 }
 
-// ─── Date helpers ──────────────────────────────────────────────────────────────
-
 function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
     d.getDate()
   ).padStart(2, "0")}`;
 }
 
-// ─── Page resolution ───────────────────────────────────────────────────────────
-
-/**
- * Find candidate Meta Pages for a brand name by de-duplicating the pages that are
- * actually running ads. Returns {id, name} only — present these to the user to
- * CONFIRM before auditing, rather than silently picking one.
- */
 export async function searchMetaPages(query: string, limit = 5, countryCode = "NL"): Promise<MetaPageResult[]> {
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) return [];
@@ -180,13 +150,16 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
   start.setDate(start.getDate() - 90);
 
   const words = query.trim().split(/\s+/).filter(Boolean);
-  // Only search the full phrase (and a 2-word prefix for long names).
-  // Single-word variations are deliberately excluded: "Emma" alone matches
-  // thousands of unrelated pages and buries the real advertiser.
+  // Search full phrase, 2-word prefix (for long names), and first word.
+  // Single-word search is safe because nameMatches() below filters by page name,
+  // discarding drama-streaming apps that happen to mention "Emma" in their ad copy.
   const variations = Array.from(
     new Set(
-      [query.trim(), words.length > 2 ? words.slice(0, 2).join(" ") : null]
-        .filter((v): v is string => !!v && v.length >= 2)
+      [
+        query.trim(),
+        words.length > 2 ? words.slice(0, 2).join(" ") : null,
+        words.length > 1 ? words[0] : null,
+      ].filter((v): v is string => !!v && v.length >= 3)
     )
   );
 
@@ -213,7 +186,6 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
       for (const ad of data.data ?? []) {
         if (!ad.page_id || !ad.page_name) continue;
         const existing = pageMap.get(ad.page_id);
-        // Extract domain from ad_creative_link_captions (e.g. "hema.nl", "www.hema.nl")
         const rawCaption = (ad as MetaAdRecord & { ad_creative_link_captions?: string[] })
           .ad_creative_link_captions?.[0];
         const domain = rawCaption
@@ -222,7 +194,6 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
         if (!existing) {
           pageMap.set(ad.page_id, { id: ad.page_id, name: ad.page_name, domain, ad_count: 1 });
         } else {
-          // Increment ad count; keep first domain seen
           existing.ad_count = (existing.ad_count ?? 0) + 1;
           if (!existing.domain && domain) existing.domain = domain;
         }
@@ -233,13 +204,6 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
   }
 
   const q = query.toLowerCase().trim();
-
-  // Filter: only keep pages whose name has meaningful overlap with the query.
-  // search_terms matches ad *content*, not advertiser names, so the raw results
-  // can include completely unrelated pages. We require that either:
-  //   (a) the page name contains the full query, OR
-  //   (b) the page name contains at least one significant word (4+ chars) from the query.
-  // This eliminates false positives like drama-streaming apps when searching "Emma Sleep".
   const queryWords = q.split(/\s+/).filter((w) => w.length >= 4);
   const nameMatches = (name: string): boolean => {
     const n = name.toLowerCase();
@@ -253,7 +217,6 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     .sort((a, b) => {
       const aL = a.name.toLowerCase();
       const bL = b.name.toLowerCase();
-      // Exact match first, then starts-with, then contains
       const score = (n: string) => (n === q ? 2 : n.startsWith(q) ? 1 : 0);
       return score(bL) - score(aL);
     })
@@ -265,13 +228,6 @@ export async function resolveMetaPageId(brandName: string): Promise<string | nul
   return pages[0]?.id ?? null;
 }
 
-// ─── Core: count active ads + flag partnership candidates ──────────────────────
-
-/**
- * Count a brand's active Meta ads over the last `days` and flag partnership
- * candidates. Returns null on any API failure — the caller shows an honest error,
- * never fabricated numbers.
- */
 export async function fetchBrandAdSnapshot(params: {
   pageId: string;
   countryCode?: string;
@@ -344,9 +300,7 @@ export async function fetchBrandAdSnapshot(params: {
       const captions = ad.ad_creative_link_captions ?? [];
       const texts = [...bodies, ...titles, ...captions];
 
-      // byline is set by Meta when the ad carries an official Paid Partnership label
-      // (e.g. "Emma Sleep with Frederique van Sprang" → byline = "Frederique van Sprang").
-      // This is a definitive signal — not a heuristic — so we always flag it as a candidate.
+      // byline is the official Paid Partnership signal from Meta.
       const hasByline = !!ad.byline?.trim();
       if (hasByline || isCandidatePartnership(texts)) {
         candidateAds.push({
@@ -358,7 +312,6 @@ export async function fetchBrandAdSnapshot(params: {
         });
       }
 
-      // Format: media_type primary; multi-body as a weak carousel/collection hint.
       if (bodies.length > 4 || captions.length > 4) formatBreakdown.collection++;
       else if (bodies.length > 2 || captions.length > 2) formatBreakdown.carousel++;
       else if (ad.media_type === "VIDEO") formatBreakdown.video++;
