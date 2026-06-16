@@ -203,6 +203,31 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     }
   }
 
+  // Fallback: if the ads_archive search returned nothing (e.g. brand has no recent
+  // ads or Meta's content search doesn't index the phrase), try the Pages Search
+  // endpoint which matches against the page name directly.
+  if (pageMap.size === 0) {
+    try {
+      const fbParams = new URLSearchParams({
+        access_token: token,
+        q: query.trim(),
+        fields: "id,name",
+        limit: String(limit * 4),
+      });
+      const fbRes = await fetch(`${META_BASE_URL}/pages/search?${fbParams.toString()}`, {
+        signal: AbortSignal.timeout(10000),
+      });
+      if (fbRes.ok) {
+        const fbData: { data?: Array<{ id?: string; name?: string }> } = await fbRes.json();
+        for (const page of fbData.data ?? []) {
+          if (page.id && page.name) pageMap.set(page.id, { id: page.id, name: page.name });
+        }
+      }
+    } catch {
+      // ignore — best-effort fallback
+    }
+  }
+
   const q = query.toLowerCase().trim();
   const queryWords = q.split(/\s+/).filter((w) => w.length >= 4);
   const nameMatches = (name: string): boolean => {
