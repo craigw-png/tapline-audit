@@ -95,7 +95,7 @@ export const appRouter = router({
     resolveCandidates: protectedProcedure
       .input(z.object({ brandName: z.string().min(1), countryCode: z.string().default("NL") }))
       .query(async ({ input }) => {
-        const candidates = await searchMetaPages(input.brandName, 5, input.countryCode);
+        const candidates = await searchMetaPages(input.brandName, 8, input.countryCode);
         return { candidates, hasLiveSearch: !!process.env.META_ACCESS_TOKEN };
       }),
 

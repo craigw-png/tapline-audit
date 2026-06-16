@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ExternalLink, AlertTriangle } from "lucide-react";
+import { ExternalLink, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
 
 type Outputs = inferRouterOutputs<AppRouter>;
 type CreateResult = Outputs["audit"]["create"];
@@ -156,6 +156,9 @@ export default function Home() {
   const [resolving, setResolving] = useState(false);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showPageIdInput, setShowPageIdInput] = useState(false);
+  const [manualPageInput, setManualPageInput] = useState("");
+  const [pageIdError, setPageIdError] = useState<string | null>(null);
 
   const [card, setCard] = useState<AuditCardData | null>(null);
   const [auditId, setAuditId] = useState<number | null>(null);
@@ -178,6 +181,30 @@ export default function Home() {
     setConfirmInput("0");
     setManualTotal("");
     setManualPartner("");
+    setShowPageIdInput(false);
+    setManualPageInput("");
+    setPageIdError(null);
+  }
+
+  /** Parse a raw page ID or Ads Library URL into a numeric page ID string. */
+  function parsePageId(raw: string): string | null {
+    const trimmed = raw.trim();
+    if (/^\d{10,20}$/.test(trimmed)) return trimmed;
+    const m = trimmed.match(/view_all_page_id=(\d+)/);
+    if (m) return m[1];
+    return null;
+  }
+
+  async function runFromPageInput() {
+    setPageIdError(null);
+    const pageId = parsePageId(manualPageInput);
+    if (!pageId) {
+      setPageIdError(
+        "Paste a numeric Page ID (e.g. 249220112144810) or a Meta Ads Library URL containing view_all_page_id=…"
+      );
+      return;
+    }
+    await runLive(pageId);
   }
 
   async function findBrand(overrideName?: string, overrideCountry?: string) {
@@ -190,8 +217,11 @@ export default function Home() {
     setNotice(null);
     try {
       const res = await utils.brand.resolveCandidates.fetch({ brandName: name.trim(), countryCode: cc });
-      setCandidates(res.candidates);
-      if (!res.candidates.length) {
+        setCandidates(res.candidates);
+        setShowPageIdInput(false);
+        setManualPageInput("");
+        setPageIdError(null);
+        if (!res.candidates.length) {
         setNotice(
           res.hasLiveSearch
             ? "No Meta Page found for that name. Check the spelling or enter the counts manually below."
@@ -418,6 +448,55 @@ export default function Home() {
               )}
 
               {notice && <p className="mt-4 text-sm text-muted-foreground">{notice}</p>}
+
+              {/* ── Can't find the right page? Manual Page ID escape hatch ── */}
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowPageIdInput((v) => !v)}
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition"
+                >
+                  {showPageIdInput ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  Can't find the right page? Paste a Page ID or Ads Library URL
+                </button>
+                {showPageIdInput && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Find the brand in the{" "}
+                      <a
+                        href={`https://www.facebook.com/ads/library/?active_status=all&ad_type=all&country=${country}&q=${encodeURIComponent(brandName)}&search_type=page`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline"
+                      >
+                        Meta Ads Library
+                      </a>
+                      , open the brand page, then copy the numeric ID from the URL
+                      (<code className="text-xs bg-muted px-1 rounded">view_all_page_id=…</code>) or paste the full URL.
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="e.g. 249220112144810 or https://facebook.com/ads/library/?view_all_page_id=…"
+                        value={manualPageInput}
+                        onChange={(e) => { setManualPageInput(e.target.value); setPageIdError(null); }}
+                        className="text-sm"
+                        onKeyDown={(e) => e.key === "Enter" && runFromPageInput()}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={runFromPageInput}
+                        disabled={createAudit.isPending || !manualPageInput.trim()}
+                        className="shrink-0"
+                      >
+                        {createAudit.isPending ? "Running…" : "Audit"}
+                      </Button>
+                    </div>
+                    {pageIdError && (
+                      <p className="text-xs text-destructive">{pageIdError}</p>
+                    )}
+                  </div>
+                )}
+              </div>
 
               <div className="mt-6 border-t border-border pt-5">
                 <h3 className="text-sm font-medium">Or enter counts manually</h3>

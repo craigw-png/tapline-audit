@@ -136,3 +136,8 @@
 - [x] Remove broken /pages/search and slug fallbacks (both require pages_read_engagement)
 - [x] Return all deduped pages sorted by ad_count desc — user picks the right one from the list
 - [x] Update META_ACCESS_TOKEN to new long-lived token (expires 2026-08-14)
+
+## Phase 15: Manual Page ID Escape Hatch
+- [x] Add "Can't find the right page?" collapsible section on candidate step
+- [x] Allow user to paste a Facebook Page URL or numeric Page ID to bypass search
+- [x] Increase candidate list limit from 5 to 8
