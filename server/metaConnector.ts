@@ -243,7 +243,9 @@ export async function fetchBrandAdSnapshot(params: {
 
   const countryCode = params.countryCode ?? "NL";
   const days = params.days ?? 30;
+  // Meta rejects today's date as ad_delivery_date_max (error 2334030) — use yesterday.
   const today = new Date();
+  today.setDate(today.getDate() - 1);
   const start = new Date(today);
   start.setDate(start.getDate() - days);
   const periodLabel = `the last ${days} days`;
