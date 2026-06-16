@@ -100,9 +100,17 @@ const CREATOR_BOOST_PATTERNS: RegExp[] = [
   /\bin my bio\b/i,
   /\bin de bio\b/i,
   /\blink in mijn bio\b/i,
-  /\bcode\s+[A-Z0-9]{3,}/,       // discount code like "Code DEDFHMF"
+  /\bcode\s+[A-Z0-9]{3,}/i,      // discount code like "Code DEDFHMF" (case-insensitive)
   /\bkodem\s+[A-Z0-9]{3,}/i,     // Polish: "Z kodem NULA20"
   /\bz kodem\b/i,                 // Polish: "with code"
+  /\bmet code\b/i,                // Dutch: "met code DREAME10"
+  /\bcode\s*:\s*[A-Z0-9]{3,}/i,  // any language: "code: DREAME10"
+  /\bkorting\s*code\b/i,         // Dutch: kortingscode
+  /\bkortingscode\b/i,           // Dutch compound
+  /\baktionscode\b/i,            // German: action code
+  /\brabattcode\b/i,             // German: discount code
+  /\bcode\s+[a-z]{2,}\d+/i,     // mixed: "code NULA20", "code dreame10"
+  /\bcode\s+\d+[a-z]+/i,        // mixed: "code 10OFF"
   /\buse code\b/i,
   /\bpromo code\b/i,
   /\baffiliate\b/i,
