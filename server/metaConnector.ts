@@ -151,32 +151,34 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
   const start = new Date(today);
   start.setDate(start.getDate() - 90);
 
-  // Use the full phrase as the primary search term.
-  // The ads_archive endpoint searches ad *content*, not page names — so we get
-  // pages whose ads mention the brand. We collect all unique pages and let the
-  // user pick the right one from the candidate list (no silent name-filter).
-  const searchTerm = query.trim();
+  // Build search term variants:
+  //   1. Full phrase: "Emma Sleep"
+  //   2. No-space compound: "emmasleep" — catches hashtags like #emmasleep in ad copy
+  // Run both in parallel and merge results.
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  const searchTerms = Array.from(
+    new Set([query.trim(), words.length > 1 ? words.join("").toLowerCase() : null].filter((v): v is string => !!v))
+  );
 
   const pageMap = new Map<string, MetaPageResult>();
 
-  // Primary: search ads_archive with the full brand name as search_terms.
-  // Returns pages whose ads contain the query in their copy.
-  try {
-    const params = new URLSearchParams({
-      access_token: token,
-      search_terms: searchTerm,
-      ad_reached_countries: JSON.stringify([countryCode]),
-      ad_type: "ALL",
-      ad_active_status: "ALL",
-      ad_delivery_date_min: isoDate(start),
-      ad_delivery_date_max: isoDate(today),
-      fields: "page_id,page_name,ad_creative_link_captions",
-      limit: "50",
-    });
-    const res = await fetch(`${META_BASE_URL}/ads_archive?${params.toString()}`, {
-      signal: AbortSignal.timeout(8000),
-    });
-    if (res.ok) {
+  async function fetchAdsArchive(searchTerm: string): Promise<void> {
+    try {
+      const params = new URLSearchParams({
+        access_token: token!,
+        search_terms: searchTerm,
+        ad_reached_countries: JSON.stringify([countryCode]),
+        ad_type: "ALL",
+        ad_active_status: "ALL",
+        ad_delivery_date_min: isoDate(start),
+        ad_delivery_date_max: isoDate(today),
+        fields: "page_id,page_name,ad_creative_link_captions",
+        limit: "50",
+      });
+      const res = await fetch(`${META_BASE_URL}/ads_archive?${params.toString()}`, {
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) return;
       const data: { data?: Array<{ page_id?: string; page_name?: string; ad_creative_link_captions?: string[] }> } = await res.json();
       for (const ad of data.data ?? []) {
         if (!ad.page_id || !ad.page_name) continue;
@@ -192,24 +194,34 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
           if (!existing.domain && domain) existing.domain = domain;
         }
       }
+    } catch {
+      // ignore — try next term
     }
-  } catch {
-    // ignore — will return empty if all fallbacks also fail
   }
 
-  // Sort by ad_count desc (most active advertiser first), then exact/prefix name match.
+  // Run all search term variants in parallel
+  await Promise.all(searchTerms.map(fetchAdsArchive));
+
+  // Score each candidate:
+  //   +200 if page_name exactly equals the query (case-insensitive)
+  //   +100 if page_name contains ALL words from the query
+  //   +50  if page_name starts with the query
+  //   +1   per ad in ad_count
+  // Exact match wins over partial matches (e.g. "Dreame" beats "DreameShort").
   const q = query.toLowerCase().trim();
+  const queryWords = q.split(/\s+/).filter(Boolean);
+  const scoreCandidate = (p: MetaPageResult): number => {
+    const n = p.name.toLowerCase();
+    let s = p.ad_count ?? 0;
+    if (n === q) s += 200;                                          // exact: "dreame"
+    if (n.startsWith(q + " ") || n.startsWith(q + "-")) s += 150; // whole-word prefix: "dreame nederland", "dreame-lite"
+    if (queryWords.every((w) => n.includes(w))) s += 100;          // all words present
+    if (n.startsWith(q)) s += 50;                                  // prefix (catches "dreame" in "dreamenl")
+    return s;
+  };
+
   return Array.from(pageMap.values())
-    .sort((a, b) => {
-      const aL = a.name.toLowerCase();
-      const bL = b.name.toLowerCase();
-      // Exact or prefix name match floats to top
-      const nameScore = (n: string) => (n === q ? 2 : n.startsWith(q) ? 1 : 0);
-      const ns = nameScore(bL) - nameScore(aL);
-      if (ns !== 0) return ns;
-      // Then by ad count descending
-      return (b.ad_count ?? 0) - (a.ad_count ?? 0);
-    })
+    .sort((a, b) => scoreCandidate(b) - scoreCandidate(a))
     .slice(0, limit);
 }
 
