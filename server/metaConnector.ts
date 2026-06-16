@@ -179,7 +179,7 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
         limit: "50",
       });
       const res = await fetch(`${META_BASE_URL}/ads_archive?${params.toString()}`, {
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(6000),
       });
       if (!res.ok) continue;
       const data: { data?: Array<{ page_id?: string; page_name?: string }> } = await res.json();
@@ -203,9 +203,9 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
     }
   }
 
-  // Fallback: if the ads_archive search returned nothing (e.g. brand has no recent
-  // ads or Meta's content search doesn't index the phrase), try the Pages Search
+  // Fallback 1: if the ads_archive search returned nothing, try the Pages Search
   // endpoint which matches against the page name directly.
+  // NOTE: this requires pages_read_engagement — silently ignored if 400/403.
   if (pageMap.size === 0) {
     try {
       const fbParams = new URLSearchParams({
@@ -215,7 +215,7 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
         limit: String(limit * 4),
       });
       const fbRes = await fetch(`${META_BASE_URL}/pages/search?${fbParams.toString()}`, {
-        signal: AbortSignal.timeout(10000),
+        signal: AbortSignal.timeout(8000),
       });
       if (fbRes.ok) {
         const fbData: { data?: Array<{ id?: string; name?: string }> } = await fbRes.json();
@@ -225,6 +225,39 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
       }
     } catch {
       // ignore — best-effort fallback
+    }
+  }
+
+  // Fallback 2: slug-based lookup via /{username}?fields=id,name.
+  // Works for public pages without pages_read_engagement when the slug is known.
+  // Generates common slug variants from the brand name and tries each in parallel.
+  if (pageMap.size === 0) {
+    const base = query.trim().toLowerCase().replace(/[^a-z0-9\s]/g, "");
+    const words2 = base.split(/\s+/).filter(Boolean);
+    const slugCandidates = Array.from(
+      new Set([
+        words2.join(""),                          // "emmasleep"
+        words2.join("-"),                         // "emma-sleep"
+        words2.join("."),                         // "emma.sleep"
+        words2.join("") + countryCode.toLowerCase(), // "emmasleepnl"
+        words2[0] + words2.slice(1).join(""),     // "emmasleep" (same but explicit)
+        words2.join("") + "nl",                   // "emmasleepnl"
+        words2.join("") + "official",             // "emmasleepofficial"
+      ])
+    );
+    const slugResults = await Promise.allSettled(
+      slugCandidates.map(async (slug) => {
+        const url = `${META_BASE_URL}/${encodeURIComponent(slug)}?fields=id,name&access_token=${token}`;
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        const data: { id?: string; name?: string; error?: unknown } = await res.json();
+        if (data.id && data.name) return { id: data.id, name: data.name };
+        return null;
+      })
+    );
+    for (const r of slugResults) {
+      if (r.status === "fulfilled" && r.value) {
+        pageMap.set(r.value.id, { id: r.value.id, name: r.value.name });
+      }
     }
   }
 
