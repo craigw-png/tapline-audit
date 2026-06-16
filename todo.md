@@ -129,3 +129,10 @@
 - [x] Add quick-search suggestions on home page (Ninja Kitchen, HEMA, Dreame, Emma Sleep)
 - [x] Add "Re-run Audit" button on audit results page
 - [x] Add "View in Meta Ads Library" links on individual partnership ads in review list
+
+## Phase 14: Brand Search Fix
+- [x] Remove nameMatches filter that silently discarded all results when page names didn't match query
+- [x] Fix ad_delivery_date_max to use yesterday (Meta rejects today's date with error 2334030)
+- [x] Remove broken /pages/search and slug fallbacks (both require pages_read_engagement)
+- [x] Return all deduped pages sorted by ad_count desc — user picks the right one from the list
+- [x] Update META_ACCESS_TOKEN to new long-lived token (expires 2026-08-14)

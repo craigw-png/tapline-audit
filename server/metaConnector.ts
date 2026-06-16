@@ -145,49 +145,43 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) return [];
 
+  // Meta rejects today's date as ad_delivery_date_max (error 2334030) — use yesterday.
   const today = new Date();
+  today.setDate(today.getDate() - 1);
   const start = new Date(today);
   start.setDate(start.getDate() - 90);
 
-  const words = query.trim().split(/\s+/).filter(Boolean);
-  // Search full phrase, 2-word prefix (for long names), and first word.
-  // Single-word search is safe because nameMatches() below filters by page name,
-  // discarding drama-streaming apps that happen to mention "Emma" in their ad copy.
-  const variations = Array.from(
-    new Set(
-      [
-        query.trim(),
-        words.length > 2 ? words.slice(0, 2).join(" ") : null,
-        words.length > 1 ? words[0] : null,
-      ].filter((v): v is string => !!v && v.length >= 3)
-    )
-  );
+  // Use the full phrase as the primary search term.
+  // The ads_archive endpoint searches ad *content*, not page names — so we get
+  // pages whose ads mention the brand. We collect all unique pages and let the
+  // user pick the right one from the candidate list (no silent name-filter).
+  const searchTerm = query.trim();
 
   const pageMap = new Map<string, MetaPageResult>();
-  for (const term of variations) {
-    if (pageMap.size >= limit) break;
-    try {
-      const params = new URLSearchParams({
-        access_token: token,
-        search_terms: term,
-        ad_reached_countries: `["${countryCode}"]`,
-        ad_type: "ALL",
-        ad_active_status: "ALL",
-        ad_delivery_date_min: isoDate(start),
-        ad_delivery_date_max: isoDate(today),
-        fields: "page_id,page_name,ad_creative_link_captions",
-        limit: "50",
-      });
-      const res = await fetch(`${META_BASE_URL}/ads_archive?${params.toString()}`, {
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!res.ok) continue;
-      const data: { data?: Array<{ page_id?: string; page_name?: string }> } = await res.json();
+
+  // Primary: search ads_archive with the full brand name as search_terms.
+  // Returns pages whose ads contain the query in their copy.
+  try {
+    const params = new URLSearchParams({
+      access_token: token,
+      search_terms: searchTerm,
+      ad_reached_countries: JSON.stringify([countryCode]),
+      ad_type: "ALL",
+      ad_active_status: "ALL",
+      ad_delivery_date_min: isoDate(start),
+      ad_delivery_date_max: isoDate(today),
+      fields: "page_id,page_name,ad_creative_link_captions",
+      limit: "50",
+    });
+    const res = await fetch(`${META_BASE_URL}/ads_archive?${params.toString()}`, {
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const data: { data?: Array<{ page_id?: string; page_name?: string; ad_creative_link_captions?: string[] }> } = await res.json();
       for (const ad of data.data ?? []) {
         if (!ad.page_id || !ad.page_name) continue;
         const existing = pageMap.get(ad.page_id);
-        const rawCaption = (ad as MetaAdRecord & { ad_creative_link_captions?: string[] })
-          .ad_creative_link_captions?.[0];
+        const rawCaption = ad.ad_creative_link_captions?.[0];
         const domain = rawCaption
           ? rawCaption.replace(/^https?:\/\//i, "").replace(/^www\./i, "").split("/")[0].toLowerCase()
           : undefined;
@@ -198,85 +192,23 @@ export async function searchMetaPages(query: string, limit = 5, countryCode = "N
           if (!existing.domain && domain) existing.domain = domain;
         }
       }
-    } catch {
-      // ignore and try next variation
     }
+  } catch {
+    // ignore — will return empty if all fallbacks also fail
   }
 
-  // Fallback 1: if the ads_archive search returned nothing, try the Pages Search
-  // endpoint which matches against the page name directly.
-  // NOTE: this requires pages_read_engagement — silently ignored if 400/403.
-  if (pageMap.size === 0) {
-    try {
-      const fbParams = new URLSearchParams({
-        access_token: token,
-        q: query.trim(),
-        fields: "id,name",
-        limit: String(limit * 4),
-      });
-      const fbRes = await fetch(`${META_BASE_URL}/pages/search?${fbParams.toString()}`, {
-        signal: AbortSignal.timeout(8000),
-      });
-      if (fbRes.ok) {
-        const fbData: { data?: Array<{ id?: string; name?: string }> } = await fbRes.json();
-        for (const page of fbData.data ?? []) {
-          if (page.id && page.name) pageMap.set(page.id, { id: page.id, name: page.name });
-        }
-      }
-    } catch {
-      // ignore — best-effort fallback
-    }
-  }
-
-  // Fallback 2: slug-based lookup via /{username}?fields=id,name.
-  // Works for public pages without pages_read_engagement when the slug is known.
-  // Generates common slug variants from the brand name and tries each in parallel.
-  if (pageMap.size === 0) {
-    const base = query.trim().toLowerCase().replace(/[^a-z0-9\s]/g, "");
-    const words2 = base.split(/\s+/).filter(Boolean);
-    const slugCandidates = Array.from(
-      new Set([
-        words2.join(""),                          // "emmasleep"
-        words2.join("-"),                         // "emma-sleep"
-        words2.join("."),                         // "emma.sleep"
-        words2.join("") + countryCode.toLowerCase(), // "emmasleepnl"
-        words2[0] + words2.slice(1).join(""),     // "emmasleep" (same but explicit)
-        words2.join("") + "nl",                   // "emmasleepnl"
-        words2.join("") + "official",             // "emmasleepofficial"
-      ])
-    );
-    const slugResults = await Promise.allSettled(
-      slugCandidates.map(async (slug) => {
-        const url = `${META_BASE_URL}/${encodeURIComponent(slug)}?fields=id,name&access_token=${token}`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-        const data: { id?: string; name?: string; error?: unknown } = await res.json();
-        if (data.id && data.name) return { id: data.id, name: data.name };
-        return null;
-      })
-    );
-    for (const r of slugResults) {
-      if (r.status === "fulfilled" && r.value) {
-        pageMap.set(r.value.id, { id: r.value.id, name: r.value.name });
-      }
-    }
-  }
-
+  // Sort by ad_count desc (most active advertiser first), then exact/prefix name match.
   const q = query.toLowerCase().trim();
-  const queryWords = q.split(/\s+/).filter((w) => w.length >= 4);
-  const nameMatches = (name: string): boolean => {
-    const n = name.toLowerCase();
-    if (n.includes(q)) return true;
-    if (queryWords.length > 0 && queryWords.some((w) => n.includes(w))) return true;
-    return false;
-  };
-
   return Array.from(pageMap.values())
-    .filter((p) => nameMatches(p.name))
     .sort((a, b) => {
       const aL = a.name.toLowerCase();
       const bL = b.name.toLowerCase();
-      const score = (n: string) => (n === q ? 2 : n.startsWith(q) ? 1 : 0);
-      return score(bL) - score(aL);
+      // Exact or prefix name match floats to top
+      const nameScore = (n: string) => (n === q ? 2 : n.startsWith(q) ? 1 : 0);
+      const ns = nameScore(bL) - nameScore(aL);
+      if (ns !== 0) return ns;
+      // Then by ad count descending
+      return (b.ad_count ?? 0) - (a.ad_count ?? 0);
     })
     .slice(0, limit);
 }
