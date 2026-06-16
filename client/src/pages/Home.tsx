@@ -186,12 +186,26 @@ export default function Home() {
     setPageIdError(null);
   }
 
-  /** Parse a raw page ID or Ads Library URL into a numeric page ID string. */
+  /** Parse a raw page ID or Ads Library URL into a numeric page ID string.
+   * Accepts:
+   *  - Raw numeric ID: 714575215318772
+   *  - Meta Ads Library URL: facebook.com/ads/library/?view_all_page_id=714575215318772
+   *  - Facebook page URL with brand_redir: facebook.com/Dyson/?brand_redir=714575215318772
+   *  - Any URL containing a 10-20 digit numeric parameter value
+   */
   function parsePageId(raw: string): string | null {
     const trimmed = raw.trim();
+    // Plain numeric ID
     if (/^\d{10,20}$/.test(trimmed)) return trimmed;
-    const m = trimmed.match(/view_all_page_id=(\d+)/);
-    if (m) return m[1];
+    // view_all_page_id= (Meta Ads Library)
+    const m1 = trimmed.match(/view_all_page_id=(\d{10,20})/);
+    if (m1) return m1[1];
+    // brand_redir= (Facebook page profile URL)
+    const m2 = trimmed.match(/brand_redir=(\d{10,20})/);
+    if (m2) return m2[1];
+    // Any URL param or path segment that looks like a page ID (10-20 digits)
+    const m3 = trimmed.match(/[=\/](\d{10,20})(?:[&#?]|$)/);
+    if (m3) return m3[1];
     return null;
   }
 
@@ -200,7 +214,7 @@ export default function Home() {
     const pageId = parsePageId(manualPageInput);
     if (!pageId) {
       setPageIdError(
-        "Paste a numeric Page ID (e.g. 249220112144810) or a Meta Ads Library URL containing view_all_page_id=…"
+        "Paste a numeric Page ID, a Meta Ads Library URL (view_all_page_id=…), or a Facebook page URL (brand_redir=…)"
       );
       return;
     }
@@ -476,7 +490,7 @@ export default function Home() {
                     </p>
                     <div className="flex gap-2">
                       <Input
-                        placeholder="e.g. 249220112144810 or https://facebook.com/ads/library/?view_all_page_id=…"
+                        placeholder="e.g. 249220112144810 or facebook.com/Dyson/?brand_redir=714575215318772"
                         value={manualPageInput}
                         onChange={(e) => { setManualPageInput(e.target.value); setPageIdError(null); }}
                         className="text-sm"
